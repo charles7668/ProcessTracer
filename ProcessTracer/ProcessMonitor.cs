@@ -8,14 +8,14 @@ namespace ProcessTracer
     internal static class ProcessMonitor
     {
         private static TraceEventSession? _Session;
+        private static readonly Dictionary<int, Process> _Processes = new();
 
         private static void StartMonitorProcessExit(Process process)
         {
             Task.Run(async () =>
             {
-                Console.WriteLine("test1");
                 await process.WaitForExitAsync();
-                Console.WriteLine("test");
+                Console.WriteLine("Process has exited.");
                 _Session?.Stop();
             });
         }
@@ -23,13 +23,30 @@ namespace ProcessTracer
         public static void Start(RunOptions options)
         {
             var process = Process.GetProcessById(options.PID);
+            if (process.HasExited)
+            {
+                Console.WriteLine("Process has exited.");
+                return;
+            }
 
             Console.WriteLine("Process Info : ");
             Console.WriteLine($"  PID : {process.Id}");
             Console.WriteLine($"  Name : {process.ProcessName}");
-            Console.WriteLine("Start monitoring...");
-            if (_Session != null && _Session.IsActive)
+
+            List<Process> childProcesses = ProcessHelper.GetChildProcess(process);
+            foreach (Process childProcess in childProcesses)
+            {
+                Console.WriteLine($"    Child Process ID : {childProcess.Id}");
+                Console.WriteLine($"    Child Process Name : {childProcess.ProcessName}");
+                _Processes[childProcess.Id] = childProcess;
+            }
+
+            _Processes[process.Id] = process;
+
+            if (_Session is { IsActive: true })
                 _Session.Stop();
+
+            Console.WriteLine("Start monitoring...");
 
             _Session = new TraceEventSession(KernelTraceEventParser.KernelSessionName);
 
@@ -41,9 +58,9 @@ namespace ProcessTracer
             {
                 _Session.Source.Kernel.FileIOWrite += delegate (FileIOReadWriteTraceData data)
                 {
-                    if (data.ProcessID == options.PID)
+                    if (_Processes.ContainsKey(data.ProcessID))
                         Console.WriteLine(
-                            $"[FileIOWrite] Process: {data.ProcessName}, File: {data.FileName}");
+                            $"[FileIOWrite] Process: {data.ProcessName}, Process Id: {data.ProcessID}, File: {data.FileName}");
                 };
             }
 
@@ -51,8 +68,9 @@ namespace ProcessTracer
             {
                 _Session.Source.Kernel.FileIOFileCreate += delegate (FileIONameTraceData data)
                 {
-                    if (data.ProcessID == options.PID)
-                        Console.WriteLine($"[FileIOFileCreate] Process: {data.ProcessName}, File: {data.FileName}");
+                    if (_Processes.ContainsKey(data.ProcessID))
+                        Console.WriteLine(
+                            $"[FileIOFileCreate] Process: {data.ProcessName}, Process Id: {data.ProcessID}, File: {data.FileName}");
                 };
             }
 

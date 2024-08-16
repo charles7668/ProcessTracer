@@ -280,6 +280,7 @@ dotnet_naming_style.start_with__.capitalization = pascal_case
 [*]
 # ReSharper properties
 resharper_csharp_keep_existing_enum_arrangement = false
+resharper_csharp_space_before_method_parentheses = true
 resharper_indent_nested_foreach_stmt = true
 resharper_indent_nested_for_stmt = true
 resharper_keep_existing_enum_arrangement = true

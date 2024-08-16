@@ -4,7 +4,7 @@ namespace ProcessTracer
 {
     public class SafeHandleWrapper(IntPtr invalidHandleValue) : SafeHandle(invalidHandleValue, true)
     {
-        public override bool IsInvalid { get; } = false;
+        public override bool IsInvalid => false;
 
         protected override bool ReleaseHandle()
         {
