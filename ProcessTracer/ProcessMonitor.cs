@@ -10,7 +10,7 @@ namespace ProcessTracer
         private static TraceEventSession? _Session;
         private static readonly Dictionary<int, Process> _Processes = new();
 
-        private static void StartMonitorProcessExit(Process process)
+        private static void StartMonitorProcessExit (Process process)
         {
             Task.Run(async () =>
             {
@@ -20,7 +20,7 @@ namespace ProcessTracer
             });
         }
 
-        public static void Start(RunOptions options)
+        public static void Start (RunOptions options)
         {
             var process = Process.GetProcessById(options.PID);
             if (process.HasExited)
@@ -50,39 +50,74 @@ namespace ProcessTracer
 
             _Session = new TraceEventSession(KernelTraceEventParser.KernelSessionName);
 
-            // enable kernel provider with file IO init and file IO keywords
+            // enable kernel provider
             _Session.EnableKernelProvider(KernelTraceEventParser.Keywords.FileIOInit |
-                                          KernelTraceEventParser.Keywords.FileIO);
+                                          KernelTraceEventParser.Keywords.FileIO |
+                                          KernelTraceEventParser.Keywords.Registry);
 
-            if (options.UseFileIOWrite)
+            _Session.Source.Kernel.FileIOWrite += delegate (FileIOReadWriteTraceData data)
             {
-                _Session.Source.Kernel.FileIOWrite += delegate (FileIOReadWriteTraceData data)
-                {
-                    if (_Processes.ContainsKey(data.ProcessID))
-                        Console.WriteLine(
-                            $"[FileIOWrite] Process: {data.ProcessName}, Process Id: {data.ProcessID}, File: {data.FileName}");
-                };
-            }
-
-            if (options.UseFileIOFileCreate)
+                if (_Processes.ContainsKey(data.ProcessID) && !string.IsNullOrWhiteSpace(data.FileName))
+                    Console.WriteLine(
+                        $"[FileIOWrite] Process: {data.ProcessName}, Process Id: {data.ProcessID}, File: {data.FileName}");
+            };
+            _Session.Source.Kernel.FileIOCreate += delegate (FileIOCreateTraceData data)
             {
-                _Session.Source.Kernel.FileIOFileCreate += delegate (FileIONameTraceData data)
-                {
-                    if (_Processes.ContainsKey(data.ProcessID))
-                        Console.WriteLine(
-                            $"[FileIOFileCreate] Process: {data.ProcessName}, Process Id: {data.ProcessID}, File: {data.FileName}");
-                };
-            }
-
-            if (options.UseRegistrySetValue)
+                if (_Processes.ContainsKey(data.ProcessID))
+                    Console.WriteLine(
+                        $"[FileIOCreate] Process: {data.ProcessName}, Process Id: {data.ProcessID}, File: {data.FileName}");
+            };
+            _Session.Source.Kernel.FileIOFileCreate += delegate (FileIONameTraceData data)
             {
-                _Session.Source.Kernel.RegistrySetValue += delegate (RegistryTraceData data)
+                if (_Processes.ContainsKey(data.ProcessID))
+                    Console.WriteLine(
+                        $"[FileIOFileCreate] Process: {data.ProcessName}, Process Id: {data.ProcessID}, File: {data.FileName}");
+            };
+            _Session.Source.Kernel.RegistrySetValue += delegate (RegistryTraceData data)
+            {
+                if (_Processes.ContainsKey(data.ProcessID))
+                    Console.WriteLine(
+                        $"[RegistrySetValue] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Key: {data.KeyName} , ValueName: {data.ValueName}");
+            };
+            _Session.Source.Kernel.RegistryCreate += delegate (RegistryTraceData data)
+            {
+                if (_Processes.ContainsKey(data.ProcessID))
+                    Console.WriteLine(
+                        $"[RegistryCreate] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Key: {data.KeyName} , ValueName: {data.ValueName}");
+            };
+            _Session.Source.Kernel.RegistryOpen += delegate (RegistryTraceData data)
+            {
+                if (_Processes.ContainsKey(data.ProcessID))
+                    Console.WriteLine(
+                        $"[RegistryOpen] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Key: {data.KeyName} , ValueName: {data.ValueName}");
+            };
+            _Session.Source.Kernel.RegistryDelete += delegate (RegistryTraceData data)
+            {
+                if (_Processes.ContainsKey(data.ProcessID))
+                    Console.WriteLine(
+                        $"[RegistryDelete] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Key: {data.KeyName} , ValueName: {data.ValueName}");
+            };
+            _Session.Source.Kernel.RegistryDeleteValue += delegate (RegistryTraceData data)
+            {
+                if (_Processes.ContainsKey(data.ProcessID))
+                    Console.WriteLine(
+                        $"[RegistryDeleteValue] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Key: {data.KeyName} , ValueName: {data.ValueName}");
+            };
+            _Session.Source.Kernel.ProcessStart += delegate (ProcessTraceData data)
+            {
+                if (_Processes.ContainsKey(ProcessHelper.GetParentProcessId(data.ProcessID)))
                 {
-                    if (_Processes.ContainsKey(data.ProcessID))
-                        Console.WriteLine(
-                            $"[RegistrySetValue] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Key: {data.KeyName} , Value: {data.ValueName}");
-                };
-            }
+                    Console.WriteLine(
+                        $"[ProcessStart] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Parent Process Id: {data.ParentID}");
+                }
+            };
+            _Session.Source.Kernel.ProcessStop += delegate (ProcessTraceData data)
+            {
+                if (!_Processes.ContainsKey(data.ProcessID)) return;
+                _Processes.Remove(data.ProcessID);
+                Console.WriteLine(
+                    $"[ProcessStop] Process: {data.ProcessName}, Process Id: {data.ProcessID}");
+            };
 
             StartMonitorProcessExit(process);
 
