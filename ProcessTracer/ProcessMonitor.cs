@@ -105,7 +105,7 @@ namespace ProcessTracer
             };
             _Session.Source.Kernel.ProcessStart += delegate (ProcessTraceData data)
             {
-                if (_Processes.ContainsKey(ProcessHelper.GetParentProcessId(data.ProcessID)))
+                if (_Processes.ContainsKey(data.ParentID))
                 {
                     Console.WriteLine(
                         $"[ProcessStart] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Parent Process Id: {data.ParentID}");
