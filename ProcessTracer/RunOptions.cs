@@ -13,5 +13,9 @@ namespace ProcessTracer
         [Option("use-file-io-file-create", Required = false, HelpText = "Enable file IO file create tracing",
             Default = true)]
         public bool UseFileIOFileCreate { get; set; }
+
+        [Option("use-registry-set-value", Required = false, HelpText = "Enable registry set value tracing",
+            Default = true)]
+        public bool UseRegistrySetValue { get; set; }
     }
 }

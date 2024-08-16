@@ -74,6 +74,16 @@ namespace ProcessTracer
                 };
             }
 
+            if (options.UseRegistrySetValue)
+            {
+                _Session.Source.Kernel.RegistrySetValue += delegate (RegistryTraceData data)
+                {
+                    if (_Processes.ContainsKey(data.ProcessID))
+                        Console.WriteLine(
+                            $"[RegistrySetValue] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Key: {data.KeyName} , Value: {data.ValueName}");
+                };
+            }
+
             StartMonitorProcessExit(process);
 
             _Session.Source.Process();
