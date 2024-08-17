@@ -55,6 +55,8 @@ namespace ProcessTracer
 
         private static void Main(string[] args)
         {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+
             // this program need start with admin rights
             if (CanElevate())
             {

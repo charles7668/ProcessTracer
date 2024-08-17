@@ -280,7 +280,7 @@ dotnet_naming_style.start_with__.capitalization = pascal_case
 [*]
 # ReSharper properties
 resharper_csharp_keep_existing_enum_arrangement = false
-resharper_csharp_space_before_method_parentheses = true
+resharper_csharp_space_before_method_parentheses = false
 resharper_indent_nested_foreach_stmt = true
 resharper_indent_nested_for_stmt = true
 resharper_keep_existing_enum_arrangement = true
@@ -300,3 +300,6 @@ resharper_built_in_type_reference_style_for_member_access_highlighting = hint
 resharper_built_in_type_reference_style_highlighting = hint
 resharper_property_can_be_made_init_only_global_highlighting = hint
 resharper_redundant_base_qualifier_highlighting = warning
+
+# Microsoft .NET properties
+csharp_space_between_method_declaration_name_and_open_parenthesis = false
