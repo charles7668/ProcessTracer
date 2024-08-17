@@ -70,6 +70,12 @@ namespace ProcessTracer
 
         private static void StartWithRunOptions(RunOptions options)
         {
+            if (options.PID == 0 && string.IsNullOrEmpty(options.ModuleFile))
+            {
+                Console.Error.WriteLine("Please provide PID or ModuleFile");
+                Environment.Exit(1);
+            }
+
             ProcessMonitor.Start(options);
             Environment.Exit(0);
         }

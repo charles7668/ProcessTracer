@@ -9,7 +9,7 @@ namespace ProcessTracer
 {
     internal static class ProcessHelper
     {
-        private static int GetParentProcessId (int processId)
+        private static int GetParentProcessId(int processId)
         {
             int parentId = 0;
             var handle = new HANDLE(IntPtr.Zero);
@@ -44,7 +44,7 @@ namespace ProcessTracer
             return parentId;
         }
 
-        public static List<Process> GetChildProcess (Process parentProcess)
+        public static List<Process> GetChildProcess(Process parentProcess)
         {
             var childProcesses = new List<Process>();
             Process[] allProcesses = Process.GetProcesses();

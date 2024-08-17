@@ -10,7 +10,7 @@ namespace ProcessTracer
         private static TraceEventSession? _Session;
         private static readonly Dictionary<int, Process> _Processes = new();
 
-        private static void StartMonitorProcessExit (Process process)
+        private static void StartMonitorProcessExit(Process process)
         {
             Task.Run(async () =>
             {
@@ -20,9 +20,37 @@ namespace ProcessTracer
             });
         }
 
-        public static void Start (RunOptions options)
+        public static void Start(RunOptions options)
         {
-            var process = Process.GetProcessById(options.PID);
+            Process? process = null;
+            if (options.PID != 0)
+                process = Process.GetProcessById(options.PID);
+            else if (!string.IsNullOrWhiteSpace(options.ModuleFile))
+            {
+                Process[] processes = Process.GetProcesses();
+                foreach (Process p in processes)
+                {
+                    try
+                    {
+                        if (!string.Equals(p.MainModule?.FileName, options.ModuleFile,
+                                StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        process = p;
+                        break;
+                    }
+                    catch
+                    {
+                        // ignore
+                    }
+                }
+            }
+
+            if (process == null)
+            {
+                Console.Error.WriteLine("Can't find process.");
+                Environment.Exit(1);
+            }
+
             if (process.HasExited)
             {
                 Console.WriteLine("Process has exited.");
