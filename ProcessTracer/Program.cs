@@ -1,5 +1,6 @@
 ﻿using CommandLine;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Security;
@@ -8,6 +9,12 @@ namespace ProcessTracer
 {
     internal static class Program
     {
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetConsoleWindow();
+
         private static unsafe bool CanElevate()
         {
             HANDLE hToken = HANDLE.Null;
@@ -70,6 +77,12 @@ namespace ProcessTracer
 
         private static void StartWithRunOptions(RunOptions options)
         {
+            if (options.HideConsole)
+            {
+                IntPtr hWnd = GetConsoleWindow();
+                ShowWindow(hWnd, 0);
+            }
+
             if (options.PID == 0 && string.IsNullOrEmpty(options.ModuleFile))
             {
                 Console.Error.WriteLine("Please provide PID or ModuleFile");
