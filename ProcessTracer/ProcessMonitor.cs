@@ -19,7 +19,22 @@ namespace ProcessTracer
                 do
                 {
                     await Task.Delay(1000);
-                } while (_Processes.Count > 0);
+                    foreach ((int key, Process? proc) in _Processes)
+                    {
+                        try
+                        {
+                            if (!proc.HasExited) continue;
+                            _Processes.Remove(key, out _);
+                            Console.WriteLine($"[ProcessExit] Process: {proc.ProcessName}, Process Id: {proc.Id}");
+                        }
+                        catch
+                        {
+                            _Processes.Remove(key, out _);
+                            Console.WriteLine(
+                                $"[ProcessExit] Process: {proc.ProcessName}, Process Id: {proc.Id}");
+                        }
+                    }
+                } while (!_Processes.IsEmpty);
 
                 Console.WriteLine("Process has exited.");
                 _Session?.Stop();
