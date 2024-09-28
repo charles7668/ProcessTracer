@@ -13,16 +13,26 @@ namespace ProcessTracer
         private static bool _WaitingAttach;
         private static Task? _MonitorTask;
 
-        private static void StartMonitorProcessExit()
+        private static void StartMonitorProcessExit(int waitingTime)
         {
             if (_MonitorTask != null)
                 return;
+            DateTime startTime = DateTime.Now;
             _MonitorTask = Task.Run(async () =>
             {
                 do
                 {
                     if (_WaitingAttach)
+                    {
+                        DateTime now = DateTime.Now;
+                        if (waitingTime > 0 && (now - startTime).TotalMilliseconds >= waitingTime)
+                        {
+                            Console.WriteLine("Timeout exceeded");
+                            _Session?.Stop();
+                            break;
+                        }
                         continue;
+                    }
                     await Task.Delay(1000);
                     foreach ((int key, Process? proc) in _Processes)
                     {
@@ -75,7 +85,7 @@ namespace ProcessTracer
                                     StringComparison.OrdinalIgnoreCase))
                                 continue;
                             _Processes[p.Id] = p;
-                            StartMonitorProcessExit();
+                            StartMonitorProcessExit(options.WaitingTime);
                             _WaitingAttach = false;
                             break;
                         }
@@ -121,7 +131,7 @@ namespace ProcessTracer
                 _Session.Stop();
 
             if (options.PID == 0 && !string.IsNullOrWhiteSpace(options.ModuleFile))
-                StartMonitorProcessExit();
+                StartMonitorProcessExit(options.WaitingTime);
 
             Console.WriteLine("Start monitoring...");
 
@@ -192,7 +202,7 @@ namespace ProcessTracer
                             $"[ProcessStart] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Parent Process Id: {data.ParentID}");
                         if (p.MainModule?.FileName != waitImageName) return;
                         _Processes[data.ProcessID] = p;
-                        StartMonitorProcessExit();
+                        StartMonitorProcessExit(options.WaitingTime);
                         _WaitingAttach = false;
                     }
                     catch (Exception)
