@@ -11,13 +11,18 @@ namespace ProcessTracer
         private static TraceEventSession? _Session;
         private static readonly ConcurrentDictionary<int, Process> _Processes = new();
         private static bool _WaitingAttach;
+        private static Task? _MonitorTask;
 
-        private static void StartMonitorProcessExit(Process process)
+        private static void StartMonitorProcessExit()
         {
-            Task.Run(async () =>
+            if (_MonitorTask != null)
+                return;
+            _MonitorTask = Task.Run(async () =>
             {
                 do
                 {
+                    if (_WaitingAttach)
+                        continue;
                     await Task.Delay(1000);
                     foreach ((int key, Process? proc) in _Processes)
                     {
@@ -25,19 +30,27 @@ namespace ProcessTracer
                         {
                             if (!proc.HasExited) continue;
                             _Processes.Remove(key, out _);
-                            Console.WriteLine($"[ProcessExit] Process: {proc.ProcessName}, Process Id: {proc.Id}");
+                            Console.WriteLine($"[ProcessExit] Process Id: {key}");
                         }
                         catch
                         {
                             _Processes.Remove(key, out _);
                             Console.WriteLine(
-                                $"[ProcessExit] Process: {proc.ProcessName}, Process Id: {proc.Id}");
+                                $"[ProcessExit] Process Id: {key}");
                         }
                     }
-                } while (!_Processes.IsEmpty);
 
-                Console.WriteLine("Process has exited.");
-                _Session?.Stop();
+                    if (_Processes.IsEmpty)
+                    {
+                        Console.WriteLine("Process has exited.");
+                        while (_Session == null)
+                        {
+                        }
+
+                        _Session.Stop();
+                        break;
+                    }
+                } while (true);
             });
         }
 
@@ -51,26 +64,30 @@ namespace ProcessTracer
             else if (!string.IsNullOrWhiteSpace(options.ModuleFile))
             {
                 _WaitingAttach = true;
-                Process[] processes = Process.GetProcesses();
-                foreach (Process p in processes)
+                Task.Run(() =>
                 {
-                    try
+                    Process[] processes = Process.GetProcesses();
+                    foreach (Process p in processes)
                     {
-                        if (!string.Equals(p.MainModule?.FileName, options.ModuleFile,
-                                StringComparison.OrdinalIgnoreCase))
-                            continue;
-                        process = p;
-                        _WaitingAttach = false;
-                        break;
+                        try
+                        {
+                            if (!string.Equals(p.MainModule?.FileName, options.ModuleFile,
+                                    StringComparison.OrdinalIgnoreCase))
+                                continue;
+                            _Processes[p.Id] = p;
+                            StartMonitorProcessExit();
+                            _WaitingAttach = false;
+                            break;
+                        }
+                        catch
+                        {
+                            // ignore
+                        }
                     }
-                    catch
-                    {
-                        // ignore
-                    }
-                }
+                });
             }
 
-            if (process == null && !_WaitingAttach)
+            if (process == null && options.PID != 0)
             {
                 Console.Error.WriteLine("Can't find process.");
                 Environment.Exit(1);
@@ -102,6 +119,9 @@ namespace ProcessTracer
 
             if (_Session is { IsActive: true })
                 _Session.Stop();
+
+            if (options.PID == 0 && !string.IsNullOrWhiteSpace(options.ModuleFile))
+                StartMonitorProcessExit();
 
             Console.WriteLine("Start monitoring...");
 
@@ -168,9 +188,11 @@ namespace ProcessTracer
                     {
                         var p = Process.GetProcessById(data.ProcessID);
                         string waitImageName = options.ModuleFile;
+                        Console.WriteLine(
+                            $"[ProcessStart] Process: {data.ProcessName}, Process Id: {data.ProcessID}, Parent Process Id: {data.ParentID}");
                         if (p.MainModule?.FileName != waitImageName) return;
                         _Processes[data.ProcessID] = p;
-                        StartMonitorProcessExit(p);
+                        StartMonitorProcessExit();
                         _WaitingAttach = false;
                     }
                     catch (Exception)
@@ -201,9 +223,6 @@ namespace ProcessTracer
                 Console.WriteLine(
                     $"[ProcessStop] Process: {data.ProcessName}, Process Id: {data.ProcessID}");
             };
-
-            if (!_WaitingAttach)
-                StartMonitorProcessExit(process);
 
             _Session.Source.Process();
         }
