@@ -3,6 +3,7 @@ using Microsoft.Diagnostics.Tracing.Parsers.Kernel;
 using Microsoft.Diagnostics.Tracing.Session;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Management;
 
 namespace ProcessTracer
 {
@@ -31,8 +32,10 @@ namespace ProcessTracer
                             _Session?.Stop();
                             break;
                         }
+
                         continue;
                     }
+
                     await Task.Delay(1000);
                     foreach ((int key, Process? proc) in _Processes)
                     {
@@ -50,28 +53,97 @@ namespace ProcessTracer
                         }
                     }
 
-                    if (_Processes.IsEmpty)
+                    if (!_Processes.IsEmpty)
+                        continue;
+                    Console.WriteLine("Process has exited.");
+                    while (_Session == null)
                     {
-                        Console.WriteLine("Process has exited.");
-                        while (_Session == null)
-                        {
-                        }
-
-                        _Session.Stop();
-                        break;
                     }
+
+                    _Session.Stop();
+                    break;
                 } while (true);
             });
         }
 
         public static void Start(RunOptions options)
         {
-            Process? process = null;
+            // first check if PID is provided
+            Dictionary<int, List<ProcessInfo>> processParentIdDict = [];
             if (options.PID != 0)
             {
-                process = Process.GetProcessById(options.PID);
+                const string query = "SELECT ProcessId, Name, ParentProcessId , ExecutablePath FROM Win32_Process";
+                using (var searcher = new ManagementObjectSearcher(query))
+                {
+                    foreach (ManagementBaseObject? o in searcher.Get())
+                    {
+                        if (o == null)
+                            continue;
+                        ManagementBaseObject p = o;
+                        int processId = Convert.ToInt32(p["ProcessId"]);
+                        string? processName = p["Name"].ToString();
+                        int parentProcessId = Convert.ToInt32(p["ParentProcessId"]);
+                        string? executablePath = p["ExecutablePath"]?.ToString();
+                        if (processName == null)
+                            continue;
+
+                        if (!processParentIdDict.ContainsKey(parentProcessId))
+                            processParentIdDict[parentProcessId] = new List<ProcessInfo>();
+                        processParentIdDict[parentProcessId].Add(new ProcessInfo(processName, processId,
+                            parentProcessId, executablePath));
+                    }
+                }
+
+                Queue<int> parentIdQueue = new();
+                parentIdQueue.Enqueue(options.PID);
+                try
+                {
+                    var process = Process.GetProcessById(options.PID);
+                    _Processes[process.Id] = process;
+                }
+                catch (Exception)
+                {
+                    // ignore 
+                }
+
+                while (parentIdQueue.Count > 0)
+                {
+                    int front = parentIdQueue.Dequeue();
+                    if (!processParentIdDict.TryGetValue(front, out List<ProcessInfo>? processInfos))
+                        continue;
+                    foreach (ProcessInfo processInfo in processInfos)
+                    {
+                        try
+                        {
+                            var childProcess = Process.GetProcessById(processInfo.ProcessId);
+                            Console.WriteLine($"    Child Process ID : {childProcess.Id}");
+                            Console.WriteLine($"    Child Process Name : {childProcess.ProcessName}");
+                            parentIdQueue.Enqueue(processInfo.ProcessId);
+                            _Processes[childProcess.Id] = childProcess;
+                        }
+                        catch
+                        {
+                            // ignore
+                        }
+                    }
+                }
+
+                foreach (KeyValuePair<int, Process> process in _Processes)
+                {
+                    List<Process> childProcesses = ProcessHelper.GetChildProcess(process.Value);
+                    foreach (Process childProcess in childProcesses)
+                    {
+                        Console.WriteLine($"    Child Process ID : {childProcess.Id}");
+                        Console.WriteLine($"    Child Process Name : {childProcess.ProcessName}");
+                        _Processes[childProcess.Id] = childProcess;
+                    }
+                }
             }
-            else if (!string.IsNullOrWhiteSpace(options.ModuleFile))
+
+            // if PID is not provided or not found
+            // check if ModuleFile is provided
+            // if provided, find the process by module file or wait for the process to start
+            if (_Processes.IsEmpty && !string.IsNullOrWhiteSpace(options.ModuleFile))
             {
                 _WaitingAttach = true;
                 Task.Run(() =>
@@ -97,41 +169,16 @@ namespace ProcessTracer
                 });
             }
 
-            if (process == null && options.PID != 0)
+            if (_Processes.IsEmpty && options.PID != 0)
             {
                 Console.Error.WriteLine("Can't find process.");
                 Environment.Exit(1);
             }
 
-
-            if (process is not null)
-            {
-                if (process.HasExited)
-                {
-                    Console.WriteLine("Process has exited.");
-                    return;
-                }
-
-                Console.WriteLine("Process Info : ");
-                Console.WriteLine($"  PID : {process.Id}");
-                Console.WriteLine($"  Name : {process.ProcessName}");
-
-                List<Process> childProcesses = ProcessHelper.GetChildProcess(process);
-                foreach (Process childProcess in childProcesses)
-                {
-                    Console.WriteLine($"    Child Process ID : {childProcess.Id}");
-                    Console.WriteLine($"    Child Process Name : {childProcess.ProcessName}");
-                    _Processes[childProcess.Id] = childProcess;
-                }
-
-                _Processes[process.Id] = process;
-            }
-
             if (_Session is { IsActive: true })
                 _Session.Stop();
 
-            if (options.PID == 0 && !string.IsNullOrWhiteSpace(options.ModuleFile))
-                StartMonitorProcessExit(options.WaitingTime);
+            StartMonitorProcessExit(options.WaitingTime);
 
             Console.WriteLine("Start monitoring...");
 
@@ -212,7 +259,8 @@ namespace ProcessTracer
                 }
                 else
                 {
-                    if (!_Processes.ContainsKey(data.ParentID)) return;
+                    if (!_Processes.ContainsKey(data.ParentID)) 
+                        return;
                     try
                     {
                         var p = Process.GetProcessById(data.ProcessID);
