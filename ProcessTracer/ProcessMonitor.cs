@@ -184,10 +184,20 @@ namespace ProcessTracer
 
             _Session = new TraceEventSession(KernelTraceEventParser.KernelSessionName);
 
+            KernelTraceEventParser.Keywords tracingKeywords = KernelTraceEventParser.Keywords.FileIOInit |
+                                                              KernelTraceEventParser.Keywords.FileIO |
+                                                              KernelTraceEventParser.Keywords.Registry;
+            if (options.DisableFileIO)
+            {
+                tracingKeywords &= ~KernelTraceEventParser.Keywords.FileIO;
+                tracingKeywords &= ~KernelTraceEventParser.Keywords.FileIOInit;
+            }
+
+            if (options.DisableRegistry)
+                tracingKeywords &= ~KernelTraceEventParser.Keywords.Registry;
+
             // enable kernel provider
-            _Session.EnableKernelProvider(KernelTraceEventParser.Keywords.FileIOInit |
-                                          KernelTraceEventParser.Keywords.FileIO |
-                                          KernelTraceEventParser.Keywords.Registry);
+            _Session.EnableKernelProvider(tracingKeywords);
 
             _Session.Source.Kernel.FileIOWrite += delegate(FileIOReadWriteTraceData data)
             {
@@ -259,7 +269,7 @@ namespace ProcessTracer
                 }
                 else
                 {
-                    if (!_Processes.ContainsKey(data.ParentID)) 
+                    if (!_Processes.ContainsKey(data.ParentID))
                         return;
                     try
                     {
