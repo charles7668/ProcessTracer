@@ -4,6 +4,7 @@ A process monitor to trace process events.
 
 - [ProcessTracer](#processtracer)
   - [Usage](#usage)
+    - [Flags](#flags)
     - [Show Help](#show-help)
     - [Using PID](#using-pid)
     - [Using Exe File Path](#using-exe-file-path)
@@ -12,6 +13,28 @@ A process monitor to trace process events.
     - [Run Build Script](#run-build-script)
 
 ## Usage
+
+Program needs admin privileges
+
+### Flags
+
+```shell
+  -p, --pid             Your process id for tracing
+
+  -f, --file            Your module file for tracing , if set pid then this setting will be ignored
+
+  -w, --wait            Waiting time for attach process when using --file option; if set to 0, the time is infinite
+
+  --hide                Hide console window
+
+  --disable-registry    Disable registry event
+
+  --disable-fileio      Disable file io event
+
+  --help                Display this help screen.
+
+  --version             Display version information.
+```
 
 ### Show Help
 
