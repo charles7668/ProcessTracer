@@ -3,21 +3,31 @@ using JetBrains.Annotations;
 
 namespace ProcessTracer
 {
-    internal class RunOptions
+    public class RunOptions
     {
         [Option('p', "pid", Required = false, HelpText = "Your process id for tracing")]
         [UsedImplicitly]
         public int PID { get; set; }
 
         [Option('f', "file", Required = false,
-            HelpText = "Your module file for tracing , if set pid then this setting will be ignored")]
+            HelpText = "Executable file witch will be monitored")]
         [UsedImplicitly]
-        public string ModuleFile { get; set; } = string.Empty;
+        public string Executable { get; set; } = string.Empty;
 
-        [Option('w', "wait", Required = false,
-            HelpText = "Waiting time for attach process when using --file option; if set to 0, the time is infinite")]
+        [Option('a', "args", Required = false,
+            HelpText = "Arguments for your executable")]
         [UsedImplicitly]
-        public int WaitingTime { get; set; }
+        public string Arguments { get; set; } = string.Empty;
+
+        [Option('o', "output", Required = false,
+            HelpText = "Output file for tracing results , if not set than use console")]
+        [UsedImplicitly]
+        public string OutputFile { get; set; } = string.Empty;
+
+        [Option('e', "error", Required = false,
+            HelpText = "Error file output path , if not set than use console")]
+        [UsedImplicitly]
+        public string OutputErrorFilePath { get; set; } = string.Empty;
 
         [Option("hide", Required = false, HelpText = "Hide console window")]
         [UsedImplicitly]

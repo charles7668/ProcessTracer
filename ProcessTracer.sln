@@ -7,6 +7,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProcessTracer", "ProcessTra
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ProcessTracerCore", "ProcessTracerCore\ProcessTracerCore.vcxproj", "{49F0B0B3-FDFB-4370-B23E-1788E6AEE2FC}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DetoursLoader", "DetoursLoader\DetoursLoader.vcxproj", "{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Common", "Common\Common.vcxitems", "{8FD81B83-600E-416C-ABBB-BA39FF835639}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,11 +45,28 @@ Global
 		{49F0B0B3-FDFB-4370-B23E-1788E6AEE2FC}.Release|x64.Build.0 = Release|x64
 		{49F0B0B3-FDFB-4370-B23E-1788E6AEE2FC}.Release|x86.ActiveCfg = Release|Win32
 		{49F0B0B3-FDFB-4370-B23E-1788E6AEE2FC}.Release|x86.Build.0 = Release|Win32
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Debug|Any CPU.Build.0 = Debug|x64
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Debug|x64.ActiveCfg = Debug|x64
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Debug|x64.Build.0 = Debug|x64
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Debug|x86.ActiveCfg = Debug|Win32
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Debug|x86.Build.0 = Debug|Win32
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Release|Any CPU.ActiveCfg = Release|x64
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Release|Any CPU.Build.0 = Release|x64
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Release|x64.ActiveCfg = Release|x64
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Release|x64.Build.0 = Release|x64
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Release|x86.ActiveCfg = Release|Win32
+		{66F91417-FCB7-4D2B-AF9B-CEE1F9FFE41D}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {06489EF7-30E0-435B-A12F-9E43C7BAB03C}
+	EndGlobalSection
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		Common\Common.vcxitems*{49f0b0b3-fdfb-4370-b23e-1788e6aee2fc}*SharedItemsImports = 4
+		Common\Common.vcxitems*{66f91417-fcb7-4d2b-af9b-cee1f9ffe41d}*SharedItemsImports = 4
+		Common\Common.vcxitems*{8fd81b83-600e-416c-abbb-ba39ff835639}*SharedItemsImports = 9
 	EndGlobalSection
 EndGlobal

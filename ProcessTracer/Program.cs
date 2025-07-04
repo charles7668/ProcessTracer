@@ -1,14 +1,21 @@
 ﻿using CommandLine;
 using System.Diagnostics;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Text;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Security;
+using Windows.Win32.System.Threading;
 
 namespace ProcessTracer
 {
     internal static class Program
     {
+        private static readonly List<string> _OriginalArgs = [];
+
+        private static Logger _logger = null!;
+
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
@@ -50,8 +57,9 @@ namespace ProcessTracer
             };
             try
             {
-                Process.Start(elevationInfo);
-                Environment.Exit(0);
+                var proc = Process.Start(elevationInfo);
+                proc?.WaitForExit();
+                // Environment.Exit(0);
             }
             catch
             {
@@ -62,35 +70,29 @@ namespace ProcessTracer
 
         private static void Main(string[] args)
         {
-            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.OutputEncoding = Encoding.UTF8;
 
-            // this program need start with admin rights
-            if (CanElevate())
+            foreach (string s in args)
             {
-                RunElevate(args);
+                Console.WriteLine(s);
+                string temp = s.Replace("\"", "\\\"");
+                _OriginalArgs.Add("\"" + temp + "\"");
             }
 
             Parser.Default.ParseArguments<RunOptions>(args)
-                .WithParsed(StartWithRunOptions)
+                .WithParsed(StartMonitor)
                 .WithNotParsed(HandleParseError);
         }
 
-        private static void StartWithRunOptions(RunOptions options)
+        private static void StartMonitor(RunOptions options)
         {
-            if (options.HideConsole)
+            _logger = new Logger(options);
+            ProcessMonitor monitor = new(options, _logger);
+            bool needRestart = monitor.Start().ConfigureAwait(false).GetAwaiter().GetResult();
+            if (needRestart && CanElevate())
             {
-                IntPtr hWnd = GetConsoleWindow();
-                ShowWindow(hWnd, 0);
+                RunElevate(_OriginalArgs.ToArray());
             }
-
-            if (options.PID == 0 && string.IsNullOrEmpty(options.ModuleFile))
-            {
-                Console.Error.WriteLine("Please provide PID or ModuleFile");
-                Environment.Exit(1);
-            }
-
-            ProcessMonitor.Start(options);
-            Environment.Exit(0);
         }
     }
 }

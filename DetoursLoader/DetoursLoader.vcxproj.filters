@@ -21,16 +21,7 @@
     <ClInclude Include="pch.h">
       <Filter>標頭檔</Filter>
     </ClInclude>
-    <ClInclude Include="origin.h">
-      <Filter>標頭檔</Filter>
-    </ClInclude>
-    <ClInclude Include="hook_func.h">
-      <Filter>標頭檔</Filter>
-    </ClInclude>
-    <ClInclude Include="hook_info.h">
-      <Filter>標頭檔</Filter>
-    </ClInclude>
-    <ClInclude Include="logger.h">
+    <ClInclude Include="DetoursLoader.h">
       <Filter>標頭檔</Filter>
     </ClInclude>
   </ItemGroup>
@@ -39,18 +30,6 @@
       <Filter>來源檔案</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
-      <Filter>來源檔案</Filter>
-    </ClCompile>
-    <ClCompile Include="origin.cpp">
-      <Filter>來源檔案</Filter>
-    </ClCompile>
-    <ClCompile Include="hook_func.cpp">
-      <Filter>來源檔案</Filter>
-    </ClCompile>
-    <ClCompile Include="hook_info.cpp">
-      <Filter>來源檔案</Filter>
-    </ClCompile>
-    <ClCompile Include="logger.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
   </ItemGroup>

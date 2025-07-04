@@ -7,9 +7,12 @@ PROCESSINFOCLASS
 // structure
 Windows.Win32.Security.TOKEN_ELEVATION
 PROCESS_BASIC_INFORMATION
+STARTUPINFOA
+PROCESS_INFORMATION
 
 // function
 Windows.Win32.Security.GetTokenInformation
 Windows.Win32.System.Threading.OpenProcessToken
 OpenProcess
 NtQueryInformationProcess
+ResumeThread
