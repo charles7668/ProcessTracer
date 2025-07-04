@@ -13,6 +13,15 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="libs">
+      <UniqueIdentifier>{a296f25d-c69b-4894-b817-ef3ecf12407b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libs\x86">
+      <UniqueIdentifier>{355e1bd8-6024-471a-baa5-5d160bafd34f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="libs\x64">
+      <UniqueIdentifier>{c60ffbb2-e357-47a2-980e-1e4768fdb5f2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -29,5 +38,13 @@
     <ClCompile Include="pch.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="libs\x86\detours.lib">
+      <Filter>libs\x86</Filter>
+    </Library>
+    <Library Include="libs\x64\detours.lib">
+      <Filter>libs\x64</Filter>
+    </Library>
   </ItemGroup>
 </Project>
