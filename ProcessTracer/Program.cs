@@ -14,7 +14,7 @@ namespace ProcessTracer
     {
         private static readonly List<string> _OriginalArgs = [];
 
-        private static Logger _logger = null!;
+        private static Logger _Logger = null!;
 
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
@@ -22,7 +22,7 @@ namespace ProcessTracer
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern IntPtr GetConsoleWindow();
 
-        private static unsafe bool CanElevate()
+        public static unsafe bool CanElevate()
         {
             HANDLE hToken = HANDLE.Null;
             TOKEN_ELEVATION_TYPE tokenType = TOKEN_ELEVATION_TYPE.TokenElevationTypeLimited;
@@ -86,8 +86,8 @@ namespace ProcessTracer
 
         private static void StartMonitor(RunOptions options)
         {
-            _logger = new Logger(options);
-            ProcessMonitor monitor = new(options, _logger);
+            _Logger = new Logger(options);
+            ProcessMonitor monitor = new(options, _Logger);
             bool needRestart = monitor.Start().ConfigureAwait(false).GetAwaiter().GetResult();
             if (needRestart && CanElevate())
             {

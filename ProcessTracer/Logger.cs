@@ -35,16 +35,24 @@
         private Func<string, Task> LogDelegate { get; set; }
         private Func<string, Task> ErrorLogDelegate { get; set; }
 
+        private object writeLock = new();
+
         private Task LogToConsole(string message)
         {
-            Console.WriteLine(message);
-            return Task.CompletedTask;
+            lock (writeLock)
+            {
+                Console.WriteLine(message);
+                return Task.CompletedTask;
+            }
         }
 
         private Task ErrorToConsole(string message)
         {
-            Console.Error.WriteLine(message);
-            return Task.CompletedTask;
+            lock (writeLock)
+            {
+                Console.Error.WriteLine(message);
+                return Task.CompletedTask;
+            }
         }
 
 

@@ -33,6 +33,9 @@
     <ClInclude Include="logger.h">
       <Filter>標頭檔</Filter>
     </ClInclude>
+    <ClInclude Include="utils.h">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -51,6 +54,9 @@
       <Filter>來源檔案</Filter>
     </ClCompile>
     <ClCompile Include="logger.cpp">
+      <Filter>來源檔案</Filter>
+    </ClCompile>
+    <ClCompile Include="utils.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
   </ItemGroup>

@@ -2,7 +2,7 @@
   "profiles": {
     "ProcessTracer": {
       "commandName": "Project",
-      "commandLineArgs": "-f\"d:/Program Files/Locale.Emulator.2.5.0.1/LEProc.exe\" -a\"-runas 4e874eb1-fc2a-41b2-b732-e59f43ac0887 \\\"d:/Program Files/SourceGit/SourceGit.exe\\\"\" -o\"test.txt\""
+      "commandLineArgs": "-f\"c:/Users/charles/Downloads/WinMerge-2.16.48.2-x64-Setup.exe\""
     }
   }
 }

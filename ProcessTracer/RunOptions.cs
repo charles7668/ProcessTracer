@@ -32,13 +32,5 @@ namespace ProcessTracer
         [Option("hide", Required = false, HelpText = "Hide console window")]
         [UsedImplicitly]
         public bool HideConsole { get; set; }
-
-        [Option("disable-registry", Required = false, HelpText = "Disable registry event")]
-        [UsedImplicitly]
-        public bool DisableRegistry { get; set; }
-
-        [Option("disable-fileio", Required = false, HelpText = "Disable file io event")]
-        [UsedImplicitly]
-        public bool DisableFileIO { get; set; }
     }
 }

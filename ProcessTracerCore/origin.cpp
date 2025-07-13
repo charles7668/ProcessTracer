@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "origin.h"
+
+#include "hook_func.h"
 #include "_win32.h"
 
 DWORD (WINAPI*RealGetModuleFileNameW)(HMODULE module_handle,
@@ -14,4 +16,8 @@ DWORD (WINAPI*RealGetModuleFileNameA)(HMODULE module_handle,
 
 VOID (WINAPI*RealExitProcess)(UINT exit_code) = ExitProcess;
 
+decltype(&CreateFileMappingW) RealCreateFileMappingW = nullptr;
+
 CreateProcessInternalWFn RealCreateProcessInternalW = nullptr;
+
+BOOL (WINAPI*RealShellExecuteExW)(SHELLEXECUTEINFOW* pExecInfo) = ShellExecuteExW;

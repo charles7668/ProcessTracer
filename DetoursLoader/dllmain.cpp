@@ -35,11 +35,13 @@ BOOL WINAPI DetourCreateProcessWithDllAWrap(_In_opt_ LPCSTR lpApplicationName,
 		lpDllName,
 		nullptr))
 	{
+		fprintf(stderr, "DetourCreateProcessWithDllsA failed with error code: %lu\n", GetLastError());
 		return FALSE;
 	}
 	if (DetourCopyPayloadToProcess(lpProcessInformation->hProcess, GUID_PIPE_HANDLE, pipeHandle, strlen(pipeHandle) + 1)
 		== FALSE)
 	{
+		fprintf(stderr, "DetourCopyPayloadToProcess failed with error code: %lu\n", GetLastError());
 		TerminateProcess(lpProcessInformation->hProcess, 0);
 		CloseHandle(lpProcessInformation->hProcess);
 		CloseHandle(lpProcessInformation->hThread);

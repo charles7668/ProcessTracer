@@ -29,7 +29,7 @@ namespace ProcessTracer
         public async Task<bool> Start()
         {
             int pid = Process.GetCurrentProcess().Id;
-            string pipeHandle = pid.ToString();
+            string pipeHandle = pid.ToString() + " " + (Program.CanElevate() ? 0 : 1);
 
             var si = new STARTUPINFOA
             {
@@ -86,21 +86,25 @@ namespace ProcessTracer
                         {
                             while (await reader.ReadLineAsync(cancellationTokenSource.Token) is { } line)
                             {
-                                if (line ==
-                                    "[Hook Error] CreateProcessInternalW RealCreateProcessInternalW failed with 740")
+                                var lines = line.Split(' ');
+                                var checkLine = string.Join(" ", lines[1..]);
+                                if (checkLine ==
+                                    "[Hook Error] CreateProcessInternalW RealCreateProcessInternalW failed with 740"
+                                    || (checkLine ==
+                                        "[Hook] ShellExecuteExW verb:runas" && Program.CanElevate()))
                                 {
                                     await needAdminCancellationTokenSource.CancelAsync();
                                 }
-                                else if (line.StartsWith(
+                                else if (checkLine.StartsWith(
                                              "[Hook] CreateProcessInternalW Process created successfully with PID: "))
                                 {
-                                    string s = line.Replace(
+                                    string s = checkLine.Replace(
                                         "[Hook] CreateProcessInternalW Process created successfully with PID: ", "");
                                     AddProcessToMonitor(Convert.ToInt32(s));
                                 }
-                                else if (line.StartsWith("[Hook] ExitProcess "))
+                                else if (checkLine.StartsWith("[Hook] ExitProcess "))
                                 {
-                                    string s = line.Replace("[Hook] ExitProcess ", "").Split(' ')[0];
+                                    string s = checkLine.Replace("[Hook] ExitProcess ", "").Split(' ')[0];
                                     RemoveProcessFromMonitor(Convert.ToInt32(s));
                                 }
 
@@ -124,6 +128,9 @@ namespace ProcessTracer
             {
                 await Task.Run(async () =>
                 {
+                    int tryTime = 0;
+                    // while (tryTime < 3)
+                    // {
                     while (_trackProcesses.Count > 0)
                     {
                         await Task.Delay(100, needAdminCancellationTokenSource.Token);
@@ -141,6 +148,10 @@ namespace ProcessTracer
                             RemoveProcessFromMonitor(i);
                         }
                     }
+
+                    // tryTime++;
+                    // await Task.Delay(1000, needAdminCancellationTokenSource.Token);
+                    // }
                 }, needAdminCancellationTokenSource.Token);
             }
             catch (TaskCanceledException ex)
@@ -160,6 +171,12 @@ namespace ProcessTracer
 
             if (needAdminCancellationTokenSource.IsCancellationRequested)
             {
+                foreach (KeyValuePair<int, Process> trackProcess in _trackProcesses)
+                {
+                    if (!trackProcess.Value.HasExited)
+                        trackProcess.Value.Kill();
+                }
+
                 return true;
             }
 
