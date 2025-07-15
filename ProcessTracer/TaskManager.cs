@@ -33,7 +33,15 @@ namespace ProcessTracer
                     {
                         if (_taskQueue.TryDequeue(out TaskMessage taskMessage))
                         {
-                            await task(taskMessage, cancellationToken);
+                            try
+                            {
+                                await task(taskMessage, cancellationToken);
+                            }
+                            catch
+                            {
+                                // if the task fails, try it again
+                                EnqueueTask(taskMessage.TaskName, taskMessage.LogMessage);
+                            }
                         }
 
                         await Task.Delay(1, cancellationToken);
