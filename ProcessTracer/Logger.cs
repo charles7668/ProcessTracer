@@ -32,62 +32,70 @@
         private readonly string _output;
         private readonly string _errorFile;
 
-        private Func<string, Task> LogDelegate { get; set; }
-        private Func<string, Task> ErrorLogDelegate { get; set; }
+        private Func<string, CancellationToken, Task> LogDelegate { get; set; }
+        private Func<string, CancellationToken, Task> ErrorLogDelegate { get; set; }
 
-        private object writeLock = new();
+        private readonly SemaphoreSlim _writeSlim = new(1, 1);
 
-        private Task LogToConsole(string message)
+        private Task LogToConsole(string message, CancellationToken cancellationToken)
         {
-            lock (writeLock)
+            Console.WriteLine(message);
+            return Task.CompletedTask;
+        }
+
+        private Task ErrorToConsole(string message, CancellationToken cancellationToken)
+        {
+            Console.Error.WriteLine(message);
+            return Task.CompletedTask;
+        }
+
+
+        private async Task LogToFile(string message, CancellationToken cancellationToken)
+        {
+            await _writeSlim.WaitAsync(CancellationToken.None);
+            try
             {
-                Console.WriteLine(message);
-                return Task.CompletedTask;
+                await using var writer = new StreamWriter(_output, append: true);
+                await writer.WriteLineAsync(message);
+            }
+            finally
+            {
+                _writeSlim.Release();
             }
         }
 
-        private Task ErrorToConsole(string message)
+        private async Task ErrorToFile(string message, CancellationToken cancellationToken)
         {
-            lock (writeLock)
+            await _writeSlim.WaitAsync(CancellationToken.None);
+            try
             {
-                Console.Error.WriteLine(message);
-                return Task.CompletedTask;
+                await using var writer = new StreamWriter(_errorFile, append: true);
+                await writer.WriteLineAsync(message);
+            }
+            finally
+            {
+                _writeSlim.Release();
             }
         }
 
-
-        private async Task LogToFile(string message)
+        public async Task LogAsync(string message, CancellationToken cancellationToken)
         {
-            await using Stream fs = new FileStream(_output, FileMode.Append);
-            await using var sw = new StreamWriter(fs);
-            await sw.WriteLineAsync(message);
-        }
-
-        private async Task ErrorToFile(string message)
-        {
-            await using Stream fs = new FileStream(_errorFile, FileMode.Append);
-            await using var sw = new StreamWriter(fs);
-            await sw.WriteLineAsync(message);
-        }
-
-        public async Task LogAsync(string message)
-        {
-            await LogDelegate(message);
+            await LogDelegate(message, cancellationToken);
         }
 
         public void Log(string message)
         {
-            LogDelegate(message).ConfigureAwait(false).GetAwaiter().GetResult();
+            LogDelegate(message, CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
-        public async Task LogErrorAsync(string message)
+        public async Task LogErrorAsync(string message, CancellationToken cancellationToken)
         {
-            await ErrorLogDelegate(message);
+            await ErrorLogDelegate(message, cancellationToken);
         }
 
         public void LogError(string message)
         {
-            ErrorLogDelegate(message).ConfigureAwait(false).GetAwaiter().GetResult();
+            ErrorLogDelegate(message, CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
         }
     }
 }

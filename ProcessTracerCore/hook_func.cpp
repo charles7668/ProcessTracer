@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "origin.h"
 #include "hook_func.h"
+
+#include <bitset>
 #include <detours.h>
 #include <ios>
 #include <Psapi.h>
@@ -12,6 +14,8 @@
 
 namespace
 {
+	const char* permission_request_str = "Permission Request";
+
 	BOOL WINAPI MineCreateProcessInternalW(
 		LPCWSTR lpApplicationName,
 		LPWSTR lpCommandLine,
@@ -133,12 +137,9 @@ BOOL WINAPI HookCreateProcessInternalW(
 )
 {
 	const std::string hook_func_name = "CreateProcessInternalW";
-	LogHookInfo(hook_func_name.c_str(), "called");
-
-	std::wstring temp = (L"Application Name: " + std::wstring(lpApplicationName ? lpApplicationName : L""));
-	LogHookInfo(hook_func_name.c_str(), std::string(temp.begin(), temp.end()).c_str());
-	temp = (L"Command Line: " + std::wstring(lpCommandLine ? lpCommandLine : L""));
-	LogHookInfo(hook_func_name.c_str(), std::string(temp.begin(), temp.end()).c_str());
+	auto msg = "[ApplicationName] " + ConvertWStringToString(lpApplicationName) + ", [CommandLine] " +
+		ConvertWStringToString(lpCommandLine);
+	LogHookInfo(hook_func_name.c_str(), msg.c_str());
 	if (!RealCreateProcessInternalW(
 		hUserToken,
 		lpApplicationName,
@@ -154,8 +155,16 @@ BOOL WINAPI HookCreateProcessInternalW(
 		hRestrictedUserToken
 	))
 	{
-		LogHookError(hook_func_name.c_str(),
-		             ("RealCreateProcessInternalW failed with " + std::to_string(GetLastError())).c_str());
+		// if 740, it means the process requires elevation
+		if (GetLastError() == 740)
+		{
+			LogInfo(permission_request_str);
+		}
+		else
+		{
+			LogHookError(hook_func_name.c_str(),
+			             ("RealCreateProcessInternalW failed with " + std::to_string(GetLastError())).c_str());
+		}
 		return FALSE;
 	}
 
@@ -353,12 +362,15 @@ NTSTATUS __stdcall HookNtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAcces
 		EaBuffer,
 		EaLength
 	);
-	LogHookNtCreateProcessInfo("NtCreateFile", "called");
-	if (*FileHandle && ObjectAttributes->ObjectName->Length > 0 && IsWriteAccess(DesiredAccess, CreateDisposition))
+	auto hook_info = GetHookInfoInstance();
+	if (*FileHandle && ObjectAttributes->ObjectName->Length > 0 && IsWriteAccess(DesiredAccess, CreateDisposition) &&
+		!EndsWith(ConvertWStringToString(ObjectAttributes->ObjectName->Buffer),
+		          "ProcessTracerPipe:" + std::string(hook_info->process_tracer_pid_string_buffer)))
 	{
 		auto file_name = ConvertWStringToString(ObjectAttributes->ObjectName->Buffer);
-		LogHookNtCreateProcessInfo("NtCreateFile",
-		                           std::string(file_name.begin(), file_name.end()).c_str());
+		std::bitset<32> binary(DesiredAccess);
+		auto msg = "[DesiredAccess] " + binary.to_string() + ", [FileName] " + file_name;
+		LogHookNtCreateProcessInfo("NtCreateFile", msg.c_str());
 	}
 	return status;
 }
@@ -380,15 +392,15 @@ NTSTATUS NTAPI HookNtMapViewOfSection(HANDLE SectionHandle, HANDLE ProcessHandle
 		AllocationType,
 		PageProtection
 	);
-	if (IsSectionFileBacked(SectionHandle) && IsWritableProtection(PageProtection))
-	{
-		TCHAR path[MAX_PATH];
-		if (GetMappedFileNameW(GetCurrentProcess(), *BaseAddress, path, MAX_PATH))
-		{
-			auto file_name = ConvertWStringToString(path);
-			LogHookInfo("NtMapViewOfSection", file_name.c_str());
-		}
-	}
+	// if (IsSectionFileBacked(SectionHandle) && IsWritableProtection(PageProtection))
+	// {
+	// 	TCHAR path[MAX_PATH];
+	// 	if (GetMappedFileNameW(GetCurrentProcess(), *BaseAddress, path, MAX_PATH))
+	// 	{
+	// 		auto file_name = ConvertWStringToString(path);
+	// 		LogHookInfo("NtMapViewOfSection", file_name.c_str());
+	// 	}
+	// }
 	return status;
 }
 
@@ -418,17 +430,31 @@ NTSTATUS NTAPI HookNtCreateUserProcess(PHANDLE ProcessHandle, PHANDLE ThreadHand
 
 BOOL WINAPI HookShellExecuteExW(SHELLEXECUTEINFOW* pExecInfo)
 {
-	LogHookInfo("ShellExecuteExW", "called");
 	auto verb = ConvertWStringToString(pExecInfo->lpVerb);
-	LogHookInfo("ShellExecuteExW", verb.c_str());
 	std::string msg = "verb:" + verb;
 	LogHookInfo("ShellExecuteExW", msg.c_str());
 	auto hook_info = GetHookInfoInstance();
 	if (hook_info->can_elevate && StartsWith(verb, "runas"))
 	{
-		LogHookError("ShellExecuteExW", "runas");
+		LogHookError("ShellExecuteExW",
+			"ProcessTracerCore can elevate, but ShellExecuteExW called with runas verb.");
+		LogInfo(permission_request_str);
 		TerminateProcess(GetCurrentProcess(), 0);
 		return FALSE;
 	}
 	return RealShellExecuteExW(pExecInfo);
+}
+
+NTSTATUS __stdcall HookNtSetInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation,
+                                            ULONG Length, FILE_INFORMATION_CLASS FileInformationClass)
+{
+	auto file_name = ConvertWStringToString(GetFileNameFromHandle(FileHandle).c_str());
+	LogHookInfo("NtSetInformationFile", file_name.c_str());
+	return NtSetInformationFile(
+		FileHandle,
+		IoStatusBlock,
+		FileInformation,
+		Length,
+		FileInformationClass
+	);
 }

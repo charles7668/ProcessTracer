@@ -9,11 +9,10 @@
 
 ProcessTracer::Logger ProcessTracer::Logger::g_logger(0, 0);
 
-std::wstring ConvertPipePath(const std::string& ansiPath)
+static std::wstring ConvertPipePath(const std::string& ansiPath)
 {
 	std::wstring result;
 
-	// 假設輸入是 "\\\\.\\pipe\\MyPipe"
 	std::string prefix = R"(\\.\pipe\)";
 	if (ansiPath.find(prefix) == 0)
 	{
@@ -22,7 +21,6 @@ std::wstring ConvertPipePath(const std::string& ansiPath)
 	}
 	else
 	{
-		// fallback: 使用整個字串（轉換為寬字元）
 		result = std::wstring(ansiPath.begin(), ansiPath.end());
 	}
 
@@ -43,7 +41,7 @@ BOOL ProcessTracer::Logger::WriteToPipe(const char* prefix, const char* message,
 		OPEN_EXISTING,
 		0,
 		nullptr);
-	IO_STATUS_BLOCK iosb = {0};
+	IO_STATUS_BLOCK iosb = {};
 	auto status = NtWriteFile(
 		hPipe,
 		nullptr, // Event
@@ -69,15 +67,6 @@ BOOL ProcessTracer::Logger::WriteToPipeNtCreateProcess(const char* prefix, const
 	if (m_process_tracer_pid == 0)
 		return FALSE;
 	std::string fullMessage = "pid:" + std::to_string(m_pid) + " " + std::string(prefix) + message + postfix;
-	DWORD bytesWritten = 0;
-	// HANDLE hPipe = CreateFileA(
-	// 	pipe_file_string.c_str(),
-	// 	GENERIC_WRITE,
-	// 	0,
-	// 	nullptr,
-	// 	OPEN_EXISTING,
-	// 	0,
-	// 	nullptr);
 	HANDLE hPipe = nullptr;
 	UNICODE_STRING uPipeName;
 	RtlInitUnicodeString(&uPipeName, pipe_file_w_string.c_str());
@@ -107,28 +96,21 @@ BOOL ProcessTracer::Logger::WriteToPipeNtCreateProcess(const char* prefix, const
 		}
 		return FALSE; // Failed to open pipe
 	}
-	// BOOL result = RealWriteFile(hPipe, fullMessage.c_str(), fullMessage.length(),
-	//                             &bytesWritten, nullptr);
 	IO_STATUS_BLOCK iosb = {0};
-	// std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-	// std::string str = conv.to_bytes(pipe_file_w_string);
-	// auto status = NtWriteFile(
 	status = NtWriteFile(
 		hPipe,
 		nullptr, // Event
 		nullptr, // ApcRoutine
 		nullptr, // ApcContext
 		&iosb,
-		(PVOID)fullMessage.c_str(),
-		// (PVOID)fullMessage.c_str(),
-		// (PVOID)uPipeName.Buffer,
+		PVOID(fullMessage.c_str()),
 		fullMessage.length(),
 		nullptr,
 		nullptr // Key
 	);
 
 	BOOL result = (status == 0); // STATUS_SUCCESS == 0
-	bytesWritten = (DWORD)iosb.Information;
+	auto bytesWritten = (DWORD)iosb.Information;
 
 	CloseHandle(hPipe);
 	return result && (bytesWritten == fullMessage.length());

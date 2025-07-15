@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "ProcessTracer": {
-      "commandName": "Project",
-      "commandLineArgs": "-f\"c:/Users/charles/Downloads/WinMerge-2.16.48.2-x64-Setup.exe\""
-    }
-  }
-}

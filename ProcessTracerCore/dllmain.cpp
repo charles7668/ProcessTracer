@@ -18,7 +18,7 @@ EXTERN_C extern PVOID __imp_ZwCreateSection;
 EXTERN_C extern PVOID __imp_NtCreateSectionEx;
 EXTERN_C extern PVOID __imp_NtMapViewOfSection;
 EXTERN_C extern PVOID __imp_NtCreateUserProcess;
-
+EXTERN_C extern PVOID __imp_NtSetInformationFile;
 
 namespace
 {
@@ -45,6 +45,7 @@ namespace
 		DetourAttach(&__imp_NtCreateSectionEx, HookNtCreateSectionEx);
 		DetourAttach(&__imp_NtMapViewOfSection, HookNtMapViewOfSection);
 		DetourAttach(&__imp_NtCreateUserProcess, HookNtCreateUserProcess);
+		DetourAttach(&__imp_NtSetInformationFile, HookNtSetInformationFile);
 
 		// NOLINTEND
 
@@ -58,6 +59,7 @@ namespace
 		VirtualProtect(&__imp_NtCreateSectionEx, sizeof(PVOID), oldProtect, nullptr);
 		VirtualProtect(&__imp_NtMapViewOfSection, sizeof(PVOID), oldProtect, nullptr);
 		VirtualProtect(&__imp_NtCreateUserProcess, sizeof(PVOID), oldProtect, nullptr);
+		VirtualProtect(&__imp_NtSetInformationFile, sizeof(PVOID), oldProtect, nullptr);
 		if (error != 0)
 		{
 			LogError(("DetourTransactionCommitEx failed with error code: " + std::to_string(error)).c_str());
@@ -87,6 +89,7 @@ namespace
 		DetourDetach(&__imp_NtCreateSectionEx, HookNtCreateSectionEx);
 		DetourDetach(&__imp_NtMapViewOfSection, HookNtMapViewOfSection);
 		DetourDetach(&__imp_NtCreateUserProcess, HookNtCreateUserProcess);
+		DetourDetach(&__imp_NtSetInformationFile, HookNtSetInformationFile);
 
 		// NOLINTEND
 		auto error = DetourTransactionCommit();
@@ -122,7 +125,7 @@ namespace
 		hook_info->process_tracer_pid = pid_value;
 
 		DWORD current_pid = GetCurrentProcessId();
-		ProcessTracer::Logger::g_logger = ProcessTracer::Logger(pid_value , current_pid);
+		ProcessTracer::Logger::g_logger = ProcessTracer::Logger(pid_value, current_pid);
 		std::string msg = "ProcessTracerCore attached to process: " + std::to_string(current_pid) +
 			", Process Tracer PID: " + std::to_string(hook_info->process_tracer_pid);
 		LogInfo(msg.c_str());
@@ -150,6 +153,7 @@ namespace
 		VirtualProtect(&__imp_NtCreateSectionEx, sizeof(PVOID), PAGE_EXECUTE_READWRITE, nullptr);
 		VirtualProtect(&__imp_NtMapViewOfSection, sizeof(PVOID), PAGE_EXECUTE_READWRITE, nullptr);
 		VirtualProtect(&__imp_NtCreateUserProcess, sizeof(PVOID), PAGE_EXECUTE_READWRITE, nullptr);
+		VirtualProtect(&__imp_NtSetInformationFile, sizeof(PVOID), PAGE_EXECUTE_READWRITE, nullptr);
 
 		return TRUE;
 	}

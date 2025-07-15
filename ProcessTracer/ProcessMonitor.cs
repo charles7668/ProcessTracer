@@ -54,7 +54,7 @@ namespace ProcessTracer
                 pipeHandle);
             if (!result)
             {
-                await logger.LogErrorAsync("Failed to create process with DLL");
+                await logger.LogErrorAsync("Failed to create process with DLL", CancellationToken.None);
                 return false;
             }
 
@@ -63,6 +63,19 @@ namespace ProcessTracer
 
             int threadCount = Environment.ProcessorCount;
             var tasks = new List<Task>(threadCount);
+            TaskManager taskManager = new();
+            taskManager.StartTaskExecutor(threadCount, (msg, cancellationToken) =>
+            {
+                switch (msg.TaskName)
+                {
+                    case "Log":
+                        return logger.LogAsync(msg.LogMessage, cancellationToken);
+                    case "Error":
+                        return logger.LogErrorAsync(msg.LogMessage, cancellationToken);
+                }
+
+                return Task.CompletedTask;
+            });
             for (int i = 0; i < threadCount; i++)
             {
                 tasks.Add(Task.Run(async () =>
@@ -88,10 +101,7 @@ namespace ProcessTracer
                             {
                                 var lines = line.Split(' ');
                                 var checkLine = string.Join(" ", lines[1..]);
-                                if (checkLine ==
-                                    "[Hook Error] CreateProcessInternalW RealCreateProcessInternalW failed with 740"
-                                    || (checkLine ==
-                                        "[Hook] ShellExecuteExW verb:runas" && Program.CanElevate()))
+                                if (checkLine == "[Info] Permission Request")
                                 {
                                     await needAdminCancellationTokenSource.CancelAsync();
                                 }
@@ -108,10 +118,10 @@ namespace ProcessTracer
                                     RemoveProcessFromMonitor(Convert.ToInt32(s));
                                 }
 
-                                await logger.LogAsync("Received: " + line);
+                                taskManager.EnqueueTask("Log", "Received: " + line);
                             }
                         }
-                        catch (Exception)
+                        catch
                         {
                             // ignore
                         }
@@ -128,10 +138,7 @@ namespace ProcessTracer
             {
                 await Task.Run(async () =>
                 {
-                    int tryTime = 0;
-                    // while (tryTime < 3)
-                    // {
-                    while (_trackProcesses.Count > 0)
+                    while (_trackProcesses.Count > 0 && !needAdminCancellationTokenSource.Token.IsCancellationRequested)
                     {
                         await Task.Delay(100, needAdminCancellationTokenSource.Token);
                         List<int> removePending = [];
@@ -148,10 +155,6 @@ namespace ProcessTracer
                             RemoveProcessFromMonitor(i);
                         }
                     }
-
-                    // tryTime++;
-                    // await Task.Delay(1000, needAdminCancellationTokenSource.Token);
-                    // }
                 }, needAdminCancellationTokenSource.Token);
             }
             catch (TaskCanceledException ex)
@@ -168,6 +171,8 @@ namespace ProcessTracer
             {
                 ex.Handle(inner => inner is TaskCanceledException);
             }
+
+            taskManager.StopTaskExecutor();
 
             if (needAdminCancellationTokenSource.IsCancellationRequested)
             {
