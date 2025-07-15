@@ -86,6 +86,11 @@ namespace ProcessTracer
 
         private static void StartMonitor(RunOptions options)
         {
+            if (options.HideConsole)
+            {
+                IntPtr hWnd = GetConsoleWindow();
+                ShowWindow(hWnd, 0);
+            }
             _Logger = new Logger(options);
             ProcessMonitor monitor = new(options, _Logger);
             bool needRestart = monitor.Start().ConfigureAwait(false).GetAwaiter().GetResult();
