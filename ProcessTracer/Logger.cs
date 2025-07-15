@@ -13,7 +13,7 @@
                 LogDelegate = LogToFile;
                 if (!File.Exists(_output))
                 {
-                    File.Create(_output);
+                    using(File.Create(_errorFile));
                 }
             }
 
@@ -24,7 +24,7 @@
                 ErrorLogDelegate = ErrorToFile;
                 if (!File.Exists(_errorFile))
                 {
-                    File.Create(_errorFile);
+                    using(File.Create(_errorFile));
                 }
             }
         }
