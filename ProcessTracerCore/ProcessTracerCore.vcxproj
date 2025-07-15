@@ -114,8 +114,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
       <OutputFile>$(OutDir)$(TargetName)32$(TargetExt)</OutputFile>
-      <AdditionalDependencies>detours.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>detours.lib;ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)libs\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>/export:DetourFinishHelperProcess,@1,NONAME /ALTERNATENAME:___imp_NtWriteFile=__imp__NtWriteFile@36 /ALTERNATENAME:___imp_ZwWriteFile=__imp__ZwWriteFile@36 /ALTERNATENAME:___imp_NtCreateSection=__imp__NtCreateSection@28 /ALTERNATENAME:___imp_NtCreateFile=__imp__NtCreateFile@44 /ALTERNATENAME:___imp_ZwCreateSection=__imp__ZwCreateSection@28 /ALTERNATENAME:___imp_NtCreateSectionEx=__imp__NtCreateSectionEx@36 /ALTERNATENAME:___imp_NtMapViewOfSection=__imp__NtMapViewOfSection@40 /ALTERNATENAME:___imp_NtCreateUserProcess=__imp__NtCreateUserProcess@44 /ALTERNATENAME:___imp_NtSetInformationFile=__imp__NtSetInformationFile@20 %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -155,8 +156,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
       <OutputFile>$(OutDir)$(TargetName)64$(TargetExt)</OutputFile>
-      <AdditionalDependencies>detours.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>detours.lib;ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(SolutionDir)libs\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>/export:DetourFinishHelperProcess,@1,NONAME %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
