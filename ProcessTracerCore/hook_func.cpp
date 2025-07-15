@@ -262,7 +262,7 @@ NTSTATUS NTAPI HookNtWriteFile(HANDLE FileHandle,
                                PLARGE_INTEGER ByteOffset,
                                PULONG Key)
 {
-	auto t = NtWriteFile(
+	const auto status = NtWriteFile(
 		FileHandle,
 		Event,
 		ApcRoutine,
@@ -273,9 +273,9 @@ NTSTATUS NTAPI HookNtWriteFile(HANDLE FileHandle,
 		ByteOffset,
 		Key
 	);
-	auto name = GetFileNameFromHandle(FileHandle);
-	LogHookInfo("NtWriteFile", std::string(name.begin(), name.end()).c_str());
-	return t;
+	const auto name = ConvertWStringToString(GetFileNameFromHandle(FileHandle).c_str());
+	LogHookInfo("NtWriteFile", name.c_str());
+	return status;
 }
 
 NTSTATUS NTAPI HookNtCreateSection(PHANDLE SectionHandle, ACCESS_MASK DesiredAccess,
