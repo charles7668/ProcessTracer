@@ -26,5 +26,8 @@ namespace ProcessTracer
             [In] string[] lpDllName,
             [In] string pipeHandle
         );
+
+        [DllImport("DetoursLoader.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+        public static extern uint GetDetourCreateProcessError();
     }
 }

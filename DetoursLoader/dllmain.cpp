@@ -5,6 +5,16 @@
 #include "DetoursLoader.h"
 #include "constants.h"
 
+namespace
+{
+	DWORD create_error;
+}
+
+DWORD EXPORT WINAPI GetDetourCreateProcessError()
+{
+	return create_error;
+}
+
 BOOL WINAPI DetourCreateProcessWithDllAWrap(_In_opt_ LPCSTR lpApplicationName,
                                             _Inout_opt_ LPSTR lpCommandLine,
                                             _In_opt_ LPSECURITY_ATTRIBUTES lpProcessAttributes,
@@ -20,6 +30,7 @@ BOOL WINAPI DetourCreateProcessWithDllAWrap(_In_opt_ LPCSTR lpApplicationName,
                                             _In_ LPCSTR pipeHandle)
 {
 	DWORD dwNewCreationFlag = dwCreationFlags | CREATE_SUSPENDED;
+	create_error = 0;
 	if (!DetourCreateProcessWithDllsA(
 		lpApplicationName,
 		lpCommandLine,
@@ -35,13 +46,17 @@ BOOL WINAPI DetourCreateProcessWithDllAWrap(_In_opt_ LPCSTR lpApplicationName,
 		lpDllName,
 		nullptr))
 	{
-		fprintf(stderr, "DetourCreateProcessWithDllsA failed with error code: %lu\n", GetLastError());
+		auto err = GetLastError();
+		fprintf(stderr, "DetourCreateProcessWithDllsA failed with error code: %lu\n", err);
+		create_error = err;
 		return FALSE;
 	}
 	if (DetourCopyPayloadToProcess(lpProcessInformation->hProcess, GUID_PIPE_HANDLE, pipeHandle, strlen(pipeHandle) + 1)
 		== FALSE)
 	{
-		fprintf(stderr, "DetourCopyPayloadToProcess failed with error code: %lu\n", GetLastError());
+		auto err = GetLastError();
+		fprintf(stderr, "DetourCopyPayloadToProcess failed with error code: %lu\n", err);
+		create_error = err;
 		TerminateProcess(lpProcessInformation->hProcess, 0);
 		CloseHandle(lpProcessInformation->hProcess);
 		CloseHandle(lpProcessInformation->hThread);

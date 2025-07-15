@@ -54,6 +54,11 @@ namespace ProcessTracer
                 pipeHandle);
             if (!result)
             {
+                var error = DetoursLoader.GetDetourCreateProcessError();
+                if (error == 740)
+                {
+                    return true;
+                }
                 await logger.LogErrorAsync("Failed to create process with DLL", CancellationToken.None);
                 return false;
             }
