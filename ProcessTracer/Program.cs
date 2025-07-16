@@ -86,6 +86,16 @@ namespace ProcessTracer
 
         private static void StartMonitor(RunOptions options)
         {
+            if (!string.IsNullOrEmpty(options.OutputFile) && !string.IsNullOrEmpty(options.OutputErrorFilePath))
+            {
+                var fullOutputFile = Path.GetFullPath(options.OutputFile);
+                var fullErrorFile = Path.GetFullPath(options.OutputErrorFilePath);
+                if (fullOutputFile == fullErrorFile)
+                {
+                    Console.Error.WriteLine("Output and error files must be different.");
+                    return;
+                }
+            }
             if (options.HideConsole)
             {
                 IntPtr hWnd = GetConsoleWindow();
