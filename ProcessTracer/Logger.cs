@@ -35,7 +35,8 @@
         private Func<string, CancellationToken, Task> LogDelegate { get; set; }
         private Func<string, CancellationToken, Task> ErrorLogDelegate { get; set; }
 
-        private readonly SemaphoreSlim _writeSlim = new(1, 1);
+        private readonly SemaphoreSlim _writeOutputSemaphore = new(1, 1);
+        private readonly SemaphoreSlim _writeErrorSemaphore = new(1, 1);
 
         private Task LogToConsole(string message, CancellationToken cancellationToken)
         {
@@ -52,7 +53,7 @@
 
         private async Task LogToFile(string message, CancellationToken cancellationToken)
         {
-            await _writeSlim.WaitAsync(CancellationToken.None);
+            await _writeOutputSemaphore.WaitAsync(CancellationToken.None);
             try
             {
                 await using var writer = new StreamWriter(_output, append: true);
@@ -60,13 +61,13 @@
             }
             finally
             {
-                _writeSlim.Release();
+                _writeOutputSemaphore.Release();
             }
         }
 
         private async Task ErrorToFile(string message, CancellationToken cancellationToken)
         {
-            await _writeSlim.WaitAsync(CancellationToken.None);
+            await _writeErrorSemaphore.WaitAsync(CancellationToken.None);
             try
             {
                 await using var writer = new StreamWriter(_errorFile, append: true);
@@ -74,7 +75,7 @@
             }
             finally
             {
-                _writeSlim.Release();
+                _writeErrorSemaphore.Release();
             }
         }
 
