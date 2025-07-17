@@ -1,64 +1,65 @@
 # ProcessTracer
 
-A process monitor to trace process events.
+A process monitor to trace process events using [Detours](https://github.com/microsoft/Detours)
+
+## Table of Contents
 
 - [ProcessTracer](#processtracer)
+  - [Table of Contents](#table-of-contents)
   - [Usage](#usage)
     - [Flags](#flags)
     - [Show Help](#show-help)
-    - [Using PID](#using-pid)
-    - [Using Exe File Path](#using-exe-file-path)
+    - [Using Executable File Without Arguments](#using-executable-file-without-arguments)
+    - [Using Executable File With Arguments](#using-executable-file-with-arguments)
   - [Build](#build)
     - [Prerequisites](#prerequisites)
     - [Run Build Script](#run-build-script)
 
 ## Usage
 
-Program needs admin privileges
-
 ### Flags
 
 ```shell
-  -p, --pid             Your process id for tracing
+  -f, --file       Executable file to be monitored
 
-  -f, --file            Your module file for tracing , if set pid then this setting will be ignored
+  -a, --args       Arguments for your executable
 
-  -w, --wait            Waiting time for attach process when using --file option; if set to 0, the time is infinite
+  -o, --output     Output file for tracing results; if not set, output is shown in the console
 
-  --hide                Hide console window
+  -e, --error      Error output file path; if not set, output is shown in the console
 
-  --disable-registry    Disable registry event
+      --hide       Hide the console window
 
-  --disable-fileio      Disable file io event
+      --help       Display this help screen
 
-  --help                Display this help screen.
-
-  --version             Display version information.
+      --version    Display version information
 ```
 
 ### Show Help
 
 ```shell
-ProcessTracer.exe -h
+ProcessTracer.exe --help
 ```
 
-### Using PID
-
-```shell
-ProcessTracer.exe -p 1234
-```
-
-### Using Exe File Path
+### Using Executable File Without Arguments
 
 ```shell
 ProcessTracer.exe -f <target-exe-path>
+```
+
+### Using Executable File With Arguments
+
+> 💡 **Note:** If your arguments start with a dash (`-`), do **not** include a space after `-a`. Use `-a"your args"` instead.
+
+```shell
+ProcessTracer.exe -f <target-exe-path> -a"your args"
 ```
 
 ## Build
 
 ### Prerequisites
 
-- [.NET 8](https://dotnet.microsoft.com/en-us/download)
+- [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download)
 
 ### Run Build Script
 
