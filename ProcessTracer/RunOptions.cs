@@ -5,10 +5,6 @@ namespace ProcessTracer
 {
     public class RunOptions
     {
-        [Option('p', "pid", Required = false, HelpText = "Your process id for tracing")]
-        [UsedImplicitly]
-        public int PID { get; set; }
-
         [Option('f', "file", Required = false,
             HelpText = "Executable file witch will be monitored")]
         [UsedImplicitly]
