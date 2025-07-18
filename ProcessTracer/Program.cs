@@ -96,17 +96,26 @@ namespace ProcessTracer
                     return;
                 }
             }
+
             if (options.HideConsole)
             {
                 IntPtr hWnd = GetConsoleWindow();
                 ShowWindow(hWnd, 0);
             }
+
             _Logger = new Logger(options);
-            ProcessMonitor monitor = new(options, _Logger);
-            bool needRestart = monitor.Start().ConfigureAwait(false).GetAwaiter().GetResult();
-            if (needRestart && CanElevate())
+            if (options.RunAs && CanElevate())
             {
                 RunElevate(_OriginalArgs.ToArray());
+            }
+            else
+            {
+                ProcessMonitor monitor = new(options, _Logger);
+                bool needRestart = monitor.Start().ConfigureAwait(false).GetAwaiter().GetResult();
+                if (needRestart && CanElevate())
+                {
+                    RunElevate(_OriginalArgs.ToArray());
+                }
             }
         }
     }

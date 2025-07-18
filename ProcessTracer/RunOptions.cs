@@ -28,5 +28,9 @@ namespace ProcessTracer
         [Option("hide", Required = false, HelpText = "Hide console window")]
         [UsedImplicitly]
         public bool HideConsole { get; set; }
+
+        [Option("runas", Required = false, HelpText = "Run application using admin")]
+        [UsedImplicitly]
+        public bool RunAs { get; set; }
     }
 }
