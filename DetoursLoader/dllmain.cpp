@@ -48,7 +48,7 @@ BOOL WINAPI DetourCreateProcessWithDllWWrap(_In_opt_ LPCWSTR lpApplicationName,
 		nullptr))
 	{
 		auto err = GetLastError();
-		fprintf(stderr, "DetourCreateProcessWithDllsA failed with error code: %lu\n", err);
+		fprintf(stderr, "DetourCreateProcessWithDllsW failed with error code: %lu\n", err);
 		create_error = err;
 		return FALSE;
 	}

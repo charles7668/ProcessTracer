@@ -29,7 +29,7 @@ namespace ProcessTracer
         public async Task<bool> Start()
         {
             int pid = Process.GetCurrentProcess().Id;
-            string pipeHandle = pid.ToString() + " " + (Program.CanElevate() ? 0 : 1);
+            byte[] pipeHandle = Encoding.Default.GetBytes(pid.ToString() + " " + (Program.CanElevate() ? 0 : 1) + "\0");
 
             var si = new STARTUPINFOW
             {
@@ -37,25 +37,26 @@ namespace ProcessTracer
             };
             var pi = new PROCESS_INFORMATION();
             string appName = options.Executable;
-            byte[] appNameBytes = Encoding.ASCII.GetBytes(appName + "\0");
+            byte[] appNameBytes = Encoding.Unicode.GetBytes(appName + "\0");
             string commandLine = "\"" + options.Executable + "\" " + options.Arguments;
-            byte[] commandLineBytes = Encoding.ASCII.GetBytes(commandLine + "\0");
+            byte[] commandLineBytes = Encoding.Unicode.GetBytes(commandLine + "\0");
             string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ProcessTracerCore32.dll");
             Win32.CreationFlag creationFlags =
                 Win32.CreationFlag.CREATE_SUSPENDED | Win32.CreationFlag.CREATE_DEFAULT_ERROR_MODE;
-            byte[] ansiDllBytes = Encoding.ASCII.GetBytes(dllPath + '\0'); // null 結尾
+            byte[] ansiDllBytes = Encoding.Default.GetBytes(dllPath + '\0');
             IntPtr strPtr = Marshal.AllocHGlobal(ansiDllBytes.Length);
             Marshal.Copy(ansiDllBytes, 0, strPtr, ansiDllBytes.Length);
-            var dllPtrs = new List<IntPtr>();
-            dllPtrs.Add(strPtr);
+            var dllPtrs = new List<IntPtr>
+                { strPtr };
             IntPtr dllArray = Marshal.AllocHGlobal(IntPtr.Size * dllPtrs.Count);
             for (int i = 0; i < dllPtrs.Count; i++)
             {
                 Marshal.WriteIntPtr(dllArray, i * IntPtr.Size, dllPtrs[i]);
             }
+            Console.WriteLine("Command Line : " + commandLine);
             bool result = DetoursLoader.DetourCreateProcessWithDllWWrap(
-                appName,
-                commandLine,
+                appNameBytes,
+                commandLineBytes,
                 IntPtr.Zero, IntPtr.Zero
                 , true, (uint)creationFlags,
                 IntPtr.Zero, null, ref si, out pi,
