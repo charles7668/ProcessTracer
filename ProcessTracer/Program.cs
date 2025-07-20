@@ -45,7 +45,7 @@ namespace ProcessTracer
             Environment.Exit(1);
         }
 
-        private static void RunElevate(string[] args)
+        private static void RunElevate(string[] args, RunOptions options)
         {
             ProcessStartInfo elevationInfo = new()
             {
@@ -55,6 +55,19 @@ namespace ProcessTracer
                 Arguments = string.Join(" ", args),
                 WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
             };
+            // if hide console option is set, use launcher.exe to hide the console window
+            if (options.HideConsole)
+            {
+                elevationInfo = new()
+                {
+                    FileName = "launcher.exe",
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    Arguments = string.Join(" ", args),
+                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
+                };
+            }
+
             try
             {
                 var proc = Process.Start(elevationInfo);
@@ -106,7 +119,7 @@ namespace ProcessTracer
             _Logger = new Logger(options);
             if (options.RunAs && CanElevate())
             {
-                RunElevate(_OriginalArgs.ToArray());
+                RunElevate(_OriginalArgs.ToArray(), options);
             }
             else
             {
@@ -114,7 +127,7 @@ namespace ProcessTracer
                 bool needRestart = monitor.Start().ConfigureAwait(false).GetAwaiter().GetResult();
                 if (needRestart && CanElevate())
                 {
-                    RunElevate(_OriginalArgs.ToArray());
+                    RunElevate(_OriginalArgs.ToArray(), options);
                 }
             }
         }

@@ -22,4 +22,8 @@
     <PackageReference Include="System.Management" Version="9.0.0-rc.2.24473.5" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Launcher\Launcher.csproj" />
+  </ItemGroup>
+
 </Project>
