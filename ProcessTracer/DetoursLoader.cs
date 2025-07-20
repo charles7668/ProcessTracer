@@ -10,9 +10,9 @@ namespace ProcessTracer
 {
     internal static class DetoursLoader
     {
-        [DllImport("DetoursLoader.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-        public static extern bool DetourCreateProcessWithDllAWrap(
-            [In] string lpApplicationName,
+        [DllImport("DetoursLoader.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+        public static extern bool DetourCreateProcessWithDllWWrap(
+            [In] string? lpApplicationName,
             [In] string? lpCommandLine,
             IntPtr lpProcessAttributes,
             IntPtr lpThreadAttributes,
@@ -20,10 +20,10 @@ namespace ProcessTracer
             uint dwCreationFlags,
             IntPtr lpEnvironment,
             [In] string? lpCurrentDirectory,
-            [In] ref STARTUPINFOA lpStartupInfo,
+            [In] ref STARTUPINFOW lpStartupInfo,
             out PROCESS_INFORMATION lpProcessInformation,
             [In] uint nDlls,
-            [In] string[] lpDllName,
+            [In] IntPtr lpDllName,
             [In] string pipeHandle
         );
 

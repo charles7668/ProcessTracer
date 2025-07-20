@@ -31,27 +31,40 @@ namespace ProcessTracer
             int pid = Process.GetCurrentProcess().Id;
             string pipeHandle = pid.ToString() + " " + (Program.CanElevate() ? 0 : 1);
 
-            var si = new STARTUPINFOA
+            var si = new STARTUPINFOW
             {
-                cb = (uint)Marshal.SizeOf(typeof(STARTUPINFOA))
+                cb = (uint)Marshal.SizeOf(typeof(STARTUPINFOW))
             };
             var pi = new PROCESS_INFORMATION();
             string appName = options.Executable;
+            byte[] appNameBytes = Encoding.ASCII.GetBytes(appName + "\0");
             string commandLine = "\"" + options.Executable + "\" " + options.Arguments;
+            byte[] commandLineBytes = Encoding.ASCII.GetBytes(commandLine + "\0");
             string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ProcessTracerCore32.dll");
             Win32.CreationFlag creationFlags =
                 Win32.CreationFlag.CREATE_SUSPENDED | Win32.CreationFlag.CREATE_DEFAULT_ERROR_MODE;
-            bool result = DetoursLoader.DetourCreateProcessWithDllAWrap(
+            byte[] ansiDllBytes = Encoding.ASCII.GetBytes(dllPath + '\0'); // null 結尾
+            IntPtr strPtr = Marshal.AllocHGlobal(ansiDllBytes.Length);
+            Marshal.Copy(ansiDllBytes, 0, strPtr, ansiDllBytes.Length);
+            var dllPtrs = new List<IntPtr>();
+            dllPtrs.Add(strPtr);
+            IntPtr dllArray = Marshal.AllocHGlobal(IntPtr.Size * dllPtrs.Count);
+            for (int i = 0; i < dllPtrs.Count; i++)
+            {
+                Marshal.WriteIntPtr(dllArray, i * IntPtr.Size, dllPtrs[i]);
+            }
+            bool result = DetoursLoader.DetourCreateProcessWithDllWWrap(
                 appName,
                 commandLine,
                 IntPtr.Zero, IntPtr.Zero
                 , true, (uint)creationFlags,
                 IntPtr.Zero, null, ref si, out pi,
                 1,
-                [
-                    dllPath
-                ],
+                dllArray,
                 pipeHandle);
+            foreach (var ptr in dllPtrs)
+                Marshal.FreeHGlobal(ptr);
+            Marshal.FreeHGlobal(dllArray);
             if (!result)
             {
                 var error = DetoursLoader.GetDetourCreateProcessError();
