@@ -79,10 +79,17 @@ namespace ProcessTracer
 
             var cancellationTokenSource = new CancellationTokenSource();
             var needAdminCancellationTokenSource = new CancellationTokenSource();
+            bool stopSignal = false;
 
             Task loggingTask = TaskExecutor.StartNamedPipeReceiveTaskAsync("ProcessTracerPipe:" + pid, logger,
                 cancellationTokenSource.Token, async (line) =>
                 {
+                    if (line == "[CloseApp]")
+                    {
+                        stopSignal = true;
+                        await cancellationTokenSource.CancelAsync();
+                        return true;
+                    }
                     var lines = line.Split(' ');
                     var checkLine = string.Join(" ", lines[1..]);
                     if (checkLine == "[Info] Permission Request")
@@ -111,7 +118,7 @@ namespace ProcessTracer
             {
                 await Task.Run(async () =>
                 {
-                    while (_trackProcesses.Count > 0 && !needAdminCancellationTokenSource.Token.IsCancellationRequested)
+                    while (_trackProcesses.Count > 0 && !needAdminCancellationTokenSource.Token.IsCancellationRequested && !stopSignal)
                     {
                         await Task.Delay(100, needAdminCancellationTokenSource.Token);
                         List<int> removePending = [];
@@ -139,14 +146,13 @@ namespace ProcessTracer
             try
             {
                 await loggingTask;
-                Console.WriteLine("Logging task completed.");
             }
             catch (AggregateException ex)
             {
                 ex.Handle(inner => inner is TaskCanceledException);
             }
 
-            if (needAdminCancellationTokenSource.IsCancellationRequested)
+            if (needAdminCancellationTokenSource.IsCancellationRequested || stopSignal)
             {
                 foreach (KeyValuePair<int, Process> trackProcess in _trackProcesses)
                 {
@@ -154,7 +160,7 @@ namespace ProcessTracer
                         trackProcess.Value.Kill();
                 }
 
-                return true;
+                return !stopSignal;
             }
 
             return false;

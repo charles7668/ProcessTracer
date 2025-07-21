@@ -64,7 +64,8 @@ namespace ProcessTracer
         {
             return async (message, cancellationToken) =>
             {
-                message = message.StartsWith("Received: ") ? message.Substring("Received: ".Length) : message;                string pipeName = "ProcessTracerPipe:" + parentPid;
+                message = message.StartsWith("Received: ") ? message.Substring("Received: ".Length) : message;   
+                string pipeName = "ProcessTracerPipe:" + parentPid;
                 await using var pipeClient =
                     new NamedPipeClientStream(".", pipeName, PipeDirection.Out,
                         PipeOptions.Asynchronous);

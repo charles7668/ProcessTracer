@@ -6,7 +6,6 @@ using System.Text;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Security;
-using Windows.Win32.System.Threading;
 
 namespace ProcessTracer
 {
@@ -16,11 +15,7 @@ namespace ProcessTracer
 
         private static Logger _Logger = null!;
 
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr GetConsoleWindow();
+        private static int _ChildPid;
 
         public static unsafe bool CanElevate()
         {
@@ -37,6 +32,9 @@ namespace ProcessTracer
             return tokenType == TOKEN_ELEVATION_TYPE.TokenElevationTypeLimited;
         }
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetConsoleWindow();
+
         private static void HandleParseError(IEnumerable<Error> errors)
         {
             foreach (Error error in errors)
@@ -45,10 +43,47 @@ namespace ProcessTracer
             Environment.Exit(1);
         }
 
+        public static async Task OnStopRequestAsync()
+        {
+            Console.WriteLine(@"Stop signal received");
+            if (_ChildPid == 0)
+                return;
+            await using var pipeClient =
+                new NamedPipeClientStream(".", "ProcessTracer:" + _ChildPid, PipeDirection.Out,
+                    PipeOptions.Asynchronous);
+            _ChildPid = 0;
+
+            await pipeClient.ConnectAsync(1000);
+            if (pipeClient.IsConnected)
+            {
+                await using var writer = new StreamWriter(pipeClient);
+                writer.AutoFlush = true;
+                await writer.WriteLineAsync("[CloseApp]");
+            }
+        }
+
+        private static void Main(string[] args)
+        {
+            Console.OutputEncoding = Encoding.UTF8;
+
+            foreach (string s in args)
+            {
+                Console.WriteLine(s);
+                string temp = s.Replace("\"", "\\\"");
+                _OriginalArgs.Add("\"" + temp + "\"");
+            }
+
+            Parser.Default.ParseArguments<RunOptions>(args)
+                .WithParsed(StartMonitor)
+                .WithNotParsed(HandleParseError);
+        }
+
         private static void RunElevate(string[] args, RunOptions options)
         {
             var newArgs = new List<string>(args)
-                { "--parent " + Process.GetCurrentProcess().Id };
+            {
+                "--parent " + Process.GetCurrentProcess().Id
+            };
             ProcessStartInfo elevationInfo = new()
             {
                 FileName = "launcher.exe",
@@ -71,28 +106,15 @@ namespace ProcessTracer
             }
         }
 
-        private static void Main(string[] args)
-        {
-            Console.OutputEncoding = Encoding.UTF8;
-
-            foreach (string s in args)
-            {
-                Console.WriteLine(s);
-                string temp = s.Replace("\"", "\\\"");
-                _OriginalArgs.Add("\"" + temp + "\"");
-            }
-
-            Parser.Default.ParseArguments<RunOptions>(args)
-                .WithParsed(StartMonitor)
-                .WithNotParsed(HandleParseError);
-        }
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
         private static void StartMonitor(RunOptions options)
         {
             if (!string.IsNullOrEmpty(options.OutputFile) && !string.IsNullOrEmpty(options.OutputErrorFilePath))
             {
-                var fullOutputFile = Path.GetFullPath(options.OutputFile);
-                var fullErrorFile = Path.GetFullPath(options.OutputErrorFilePath);
+                string fullOutputFile = Path.GetFullPath(options.OutputFile);
+                string fullErrorFile = Path.GetFullPath(options.OutputErrorFilePath);
                 if (fullOutputFile == fullErrorFile)
                 {
                     Console.Error.WriteLine("Output and error files must be different.");
@@ -108,6 +130,9 @@ namespace ProcessTracer
 
             _Logger = new Logger(options);
 
+            if (options.Parent != 0)
+                _Logger.Log("[ChildProcess] " + Process.GetCurrentProcess().Id);
+
             void WaitElevate()
             {
                 var cts = new CancellationTokenSource();
@@ -118,9 +143,19 @@ namespace ProcessTracer
                 TaskExecutor.StartNamedPipeReceiveTaskAsync(
                     "ProcessTracerPipe:" + Process.GetCurrentProcess().Id,
                     _Logger,
-                    cts.Token, _ => Task.FromResult(true)).ConfigureAwait(false).GetAwaiter().GetResult();
+                    cts.Token, line =>
+                    {
+                        if (line.StartsWith("[ChildProcess] "))
+                        {
+                            string childPidString = line.Substring("[ChildProcess] ".Length);
+                            _ChildPid = int.Parse(childPidString);
+                        }
+
+                        return Task.FromResult(true);
+                    }).ConfigureAwait(false).GetAwaiter().GetResult();
                 elevateTask.Wait(CancellationToken.None);
             }
+
             if (options.RunAs && CanElevate())
             {
                 WaitElevate();

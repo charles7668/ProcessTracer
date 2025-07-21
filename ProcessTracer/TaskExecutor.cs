@@ -46,6 +46,10 @@ namespace ProcessTracer
                             {
                                 while (await reader.ReadLineAsync(cancellationToken) is { } line)
                                 {
+                                    if (line == "[CloseApp]")
+                                    {
+                                        _ = Program.OnStopRequestAsync();
+                                    }
                                     bool needContinue = await receiveLineCallback(line);
                                     if (!needContinue)
                                         return;
