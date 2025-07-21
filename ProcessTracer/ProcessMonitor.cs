@@ -80,76 +80,30 @@ namespace ProcessTracer
             var cancellationTokenSource = new CancellationTokenSource();
             var needAdminCancellationTokenSource = new CancellationTokenSource();
 
-            int threadCount = Environment.ProcessorCount;
-            var tasks = new List<Task>(threadCount);
-            TaskManager taskManager = new();
-            taskManager.StartTaskExecutor(threadCount, (msg, cancellationToken) =>
-            {
-                switch (msg.TaskName)
+            Task loggingTask = TaskExecutor.StartNamedPipeReceiveTaskAsync("ProcessTracerPipe:" + pid, logger,
+                cancellationTokenSource.Token, async (line) =>
                 {
-                    case "Log":
-                        return logger.LogAsync(msg.LogMessage, cancellationToken);
-                    case "Error":
-                        return logger.LogErrorAsync(msg.LogMessage, cancellationToken);
-                }
-
-                return Task.CompletedTask;
-            });
-            for (int i = 0; i < threadCount; i++)
-            {
-                tasks.Add(Task.Run(async () =>
-                {
-                    while (true)
+                    var lines = line.Split(' ');
+                    var checkLine = string.Join(" ", lines[1..]);
+                    if (checkLine == "[Info] Permission Request")
                     {
-                        await using var pipeServer = new NamedPipeServerStream(
-                            "ProcessTracerPipe:" + pid,
-                            // "ProcessTracerPipe",
-                            PipeDirection.In,
-                            NamedPipeServerStream.MaxAllowedServerInstances,
-                            PipeTransmissionMode.Byte,
-                            PipeOptions.Asynchronous | PipeOptions.WriteThrough
-                        );
-                        await pipeServer.WaitForConnectionAsync(cancellationTokenSource.Token);
-                        if (cancellationTokenSource.Token.IsCancellationRequested)
-                            return;
-
-                        var reader = new StreamReader(pipeServer);
-                        try
-                        {
-                            while (await reader.ReadLineAsync(cancellationTokenSource.Token) is { } line)
-                            {
-                                var lines = line.Split(' ');
-                                var checkLine = string.Join(" ", lines[1..]);
-                                if (checkLine == "[Info] Permission Request")
-                                {
-                                    await needAdminCancellationTokenSource.CancelAsync();
-                                }
-                                else if (checkLine.StartsWith(
-                                             "[Hook] CreateProcessInternalW Process created successfully with PID: "))
-                                {
-                                    string s = checkLine.Replace(
-                                        "[Hook] CreateProcessInternalW Process created successfully with PID: ", "");
-                                    AddProcessToMonitor(Convert.ToInt32(s));
-                                }
-                                else if (checkLine.StartsWith("[Hook] ExitProcess "))
-                                {
-                                    string s = checkLine.Replace("[Hook] ExitProcess ", "").Split(' ')[0];
-                                    RemoveProcessFromMonitor(Convert.ToInt32(s));
-                                }
-
-                                taskManager.EnqueueTask("Log", "Received: " + line);
-                            }
-                        }
-                        catch
-                        {
-                            // ignore
-                        }
-
-                        if (cancellationTokenSource.Token.IsCancellationRequested)
-                            return;
+                        await needAdminCancellationTokenSource.CancelAsync();
                     }
-                }, cancellationTokenSource.Token));
-            }
+                    else if (checkLine.StartsWith(
+                                 "[Hook] CreateProcessInternalW Process created successfully with PID: "))
+                    {
+                        string s = checkLine.Replace(
+                            "[Hook] CreateProcessInternalW Process created successfully with PID: ", "");
+                        AddProcessToMonitor(Convert.ToInt32(s));
+                    }
+                    else if (checkLine.StartsWith("[Hook] ExitProcess "))
+                    {
+                        string s = checkLine.Replace("[Hook] ExitProcess ", "").Split(' ')[0];
+                        RemoveProcessFromMonitor(Convert.ToInt32(s));
+                    }
+
+                    return true;
+                });
 
             AddProcessToMonitor((int)pi.dwProcessId);
             PInvoke.ResumeThread(pi.hThread);
@@ -184,14 +138,13 @@ namespace ProcessTracer
             await cancellationTokenSource.CancelAsync();
             try
             {
-                Task.WaitAll(tasks.ToArray(), CancellationToken.None);
+                await loggingTask;
+                Console.WriteLine("Logging task completed.");
             }
             catch (AggregateException ex)
             {
                 ex.Handle(inner => inner is TaskCanceledException);
             }
-
-            taskManager.StopTaskExecutor();
 
             if (needAdminCancellationTokenSource.IsCancellationRequested)
             {

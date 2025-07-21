@@ -47,12 +47,14 @@ namespace ProcessTracer
 
         private static void RunElevate(string[] args, RunOptions options)
         {
+            var newArgs = new List<string>(args)
+                { "--parent " + Process.GetCurrentProcess().Id };
             ProcessStartInfo elevationInfo = new()
             {
                 FileName = Process.GetCurrentProcess().ProcessName,
                 UseShellExecute = true,
                 Verb = "runas",
-                Arguments = string.Join(" ", args),
+                Arguments = string.Join(" ", newArgs),
                 WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
             };
             // if hide console option is set, use launcher.exe to hide the console window
@@ -63,7 +65,7 @@ namespace ProcessTracer
                     FileName = "launcher.exe",
                     UseShellExecute = true,
                     Verb = "runas",
-                    Arguments = string.Join(" ", args),
+                    Arguments = string.Join(" ", newArgs),
                     WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
                 };
             }
@@ -117,9 +119,23 @@ namespace ProcessTracer
             }
 
             _Logger = new Logger(options);
+
+            void WaitElevate()
+            {
+                var cts = new CancellationTokenSource();
+                Task elevateTask = Task.Factory.StartNew(() =>
+                {
+                    RunElevate(_OriginalArgs.ToArray(), options);
+                }, TaskCreationOptions.LongRunning).ContinueWith(_ => cts.Cancel(), CancellationToken.None);
+                TaskExecutor.StartNamedPipeReceiveTaskAsync(
+                    "ProcessTracerPipe:" + Process.GetCurrentProcess().Id,
+                    _Logger,
+                    cts.Token, _ => Task.FromResult(true)).ConfigureAwait(false).GetAwaiter().GetResult();
+                elevateTask.Wait(CancellationToken.None);
+            }
             if (options.RunAs && CanElevate())
             {
-                RunElevate(_OriginalArgs.ToArray(), options);
+                WaitElevate();
             }
             else
             {
@@ -127,7 +143,7 @@ namespace ProcessTracer
                 bool needRestart = monitor.Start().ConfigureAwait(false).GetAwaiter().GetResult();
                 if (needRestart && CanElevate())
                 {
-                    RunElevate(_OriginalArgs.ToArray(), options);
+                    WaitElevate();
                 }
             }
         }

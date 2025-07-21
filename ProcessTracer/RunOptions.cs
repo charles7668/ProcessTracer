@@ -32,5 +32,9 @@ namespace ProcessTracer
         [Option("runas", Required = false, HelpText = "Run application using admin")]
         [UsedImplicitly]
         public bool RunAs { get; set; }
+
+        [Option("parent", Required = false, HelpText = "The parent ProcessTracer process (PID) will receive messages, which will then be forwarded to the parent process.")]
+        [UsedImplicitly]
+        public int Parent { get; set; }
     }
 }

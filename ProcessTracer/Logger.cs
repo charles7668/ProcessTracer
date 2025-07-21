@@ -1,4 +1,6 @@
-﻿namespace ProcessTracer
+﻿using System.IO.Pipes;
+
+namespace ProcessTracer
 {
     public class Logger
     {
@@ -6,25 +8,33 @@
         {
             _output = options.OutputFile;
             _errorFile = options.OutputErrorFilePath;
-            if (string.IsNullOrEmpty(_output))
-                LogDelegate = LogToConsole;
-            else
+            if (options.Parent != 0)
             {
-                LogDelegate = LogToFile;
-                if (!File.Exists(_output))
-                {
-                    using(File.Create(_errorFile));
-                }
+                LogDelegate = CreateParentLogger(options.Parent);
+                ErrorLogDelegate = CreateParentLogger(options.Parent);
             }
-
-            if (string.IsNullOrEmpty(_errorFile))
-                ErrorLogDelegate = ErrorToConsole;
             else
             {
-                ErrorLogDelegate = ErrorToFile;
-                if (!File.Exists(_errorFile))
+                if (string.IsNullOrEmpty(_output))
+                    LogDelegate = LogToConsole;
+                else
                 {
-                    using(File.Create(_errorFile));
+                    LogDelegate = LogToFile;
+                    if (!File.Exists(_output))
+                    {
+                        using (File.Create(_errorFile)) ;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(_errorFile))
+                    ErrorLogDelegate = ErrorToConsole;
+                else
+                {
+                    ErrorLogDelegate = ErrorToFile;
+                    if (!File.Exists(_errorFile))
+                    {
+                        using (File.Create(_errorFile)) ;
+                    }
                 }
             }
         }
@@ -50,6 +60,24 @@
             return Task.CompletedTask;
         }
 
+        private Func<string, CancellationToken, Task> CreateParentLogger(int parentPid)
+        {
+            return async (message, cancellationToken) =>
+            {
+                message = message.StartsWith("Received: ") ? message.Substring("Received: ".Length) : message;                string pipeName = "ProcessTracerPipe:" + parentPid;
+                await using var pipeClient =
+                    new NamedPipeClientStream(".", pipeName, PipeDirection.Out,
+                        PipeOptions.Asynchronous);
+
+                await pipeClient.ConnectAsync(1000, cancellationToken);
+                if (!pipeClient.IsConnected)
+                    throw new IOException($"Can't connect to {pipeName}");
+
+                await using var writer = new StreamWriter(pipeClient);
+                writer.AutoFlush = true;
+                await writer.WriteLineAsync(message);
+            };
+        }
 
         private async Task LogToFile(string message, CancellationToken cancellationToken)
         {

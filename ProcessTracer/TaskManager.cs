@@ -15,6 +15,8 @@ namespace ProcessTracer
 
         private Task? _executorTask;
 
+        private bool _lockEnqueue = false;
+
         public bool StartTaskExecutor(int workerCount, Func<TaskMessage, CancellationToken, Task> task)
         {
             if (_executorTask is { IsCanceled: true } or { IsCompleted: true })
@@ -27,35 +29,48 @@ namespace ProcessTracer
             CancellationToken cancellationToken = _cancellationTokenSource.Token;
             for (int i = 0; i < workerCount; i++)
             {
-                tasks.Add(Task.Run(async () =>
+                tasks.Add(Task.Factory.StartNew(() =>
                 {
-                    while (!cancellationToken.IsCancellationRequested)
+                    return Task.Run(async () =>
                     {
-                        if (_taskQueue.TryDequeue(out TaskMessage taskMessage))
+                        while (!cancellationToken.IsCancellationRequested)
                         {
-                            try
+                            if (_taskQueue.TryDequeue(out TaskMessage taskMessage))
                             {
-                                await task(taskMessage, cancellationToken);
+                                try
+                                {
+                                    await task(taskMessage, cancellationToken);
+                                }
+                                catch
+                                {
+                                    // if the task fails, try it again
+                                    EnqueueTask(taskMessage.TaskName, taskMessage.LogMessage);
+                                }
                             }
-                            catch
-                            {
-                                // if the task fails, try it again
-                                EnqueueTask(taskMessage.TaskName, taskMessage.LogMessage);
-                            }
-                        }
 
-                        await Task.Delay(1, cancellationToken);
-                    }
-                }, cancellationToken));
+                            await Task.Delay(1, cancellationToken);
+                        }
+                    }, cancellationToken);
+                }, TaskCreationOptions.LongRunning));
             }
 
+            _lockEnqueue = false;
             _executorTask = Task.WhenAll(tasks);
             return true;
         }
 
-        public void StopTaskExecutor()
+        public async Task StopTaskExecutor(bool waitComplete = false)
         {
-            _cancellationTokenSource.Cancel();
+            _lockEnqueue = true;
+            if (waitComplete)
+            {
+                while (_taskQueue.Count > 0)
+                {
+                    await Task.Delay(100);
+                }
+            }
+
+            await _cancellationTokenSource.CancelAsync();
             try
             {
                 _executorTask?.Wait();
