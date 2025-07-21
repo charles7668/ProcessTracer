@@ -51,24 +51,12 @@ namespace ProcessTracer
                 { "--parent " + Process.GetCurrentProcess().Id };
             ProcessStartInfo elevationInfo = new()
             {
-                FileName = Process.GetCurrentProcess().ProcessName,
+                FileName = "launcher.exe",
                 UseShellExecute = true,
                 Verb = "runas",
                 Arguments = string.Join(" ", newArgs),
                 WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
             };
-            // if hide console option is set, use launcher.exe to hide the console window
-            if (options.HideConsole)
-            {
-                elevationInfo = new()
-                {
-                    FileName = "launcher.exe",
-                    UseShellExecute = true,
-                    Verb = "runas",
-                    Arguments = string.Join(" ", newArgs),
-                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
-                };
-            }
 
             try
             {
