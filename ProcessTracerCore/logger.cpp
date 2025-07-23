@@ -177,6 +177,32 @@ void LogInfo(const char* msg)
 	auto _ = ProcessTracer::Logger::g_logger.Info(msg);
 }
 
+void LogInfoF(const char* msg, ...)
+{
+	char buffer[1024];
+	va_list args;
+	va_start(args, msg);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+	auto _ = vsnprintf(buffer, sizeof(buffer), msg, args);
+#pragma clang diagnostic pop
+	va_end(args);
+	LogInfo(buffer);
+}
+
+void LogErrorF(const char* msg, ...)
+{
+	char buffer[1024];
+	va_list args;
+	va_start(args, msg);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+	auto _ = vsnprintf(buffer, sizeof(buffer), msg, args);
+#pragma clang diagnostic pop
+	va_end(args);
+	LogError(buffer);
+}
+
 void LogHookInfo(const char* hook_func_name, const char* msg)
 {
 	auto _ = ProcessTracer::Logger::g_logger.HookInfo(hook_func_name, msg);

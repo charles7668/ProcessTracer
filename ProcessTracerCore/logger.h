@@ -31,6 +31,8 @@ namespace ProcessTracer
 // wrap the g_logger call in Logger class
 VOID LogError(const char* msg);
 VOID LogInfo(const char* msg);
+VOID LogInfoF(const char* msg , ...);
+VOID LogErrorF(const char* msg, ...);
 VOID LogHookInfo(const char* hook_func_name, const char* msg);
 VOID LogHookNtCreateProcessInfo(const char* hook_func_name, const char* msg);
 VOID LogHookError(const char* hook_func_name, const char* msg);

@@ -30,6 +30,16 @@ namespace
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
 
+		LogInfoF("NtWriteFile Ptr : %p", __imp_NtWriteFile);
+		LogInfoF("ZwWriteFile Ptr : %p", __imp_ZwWriteFile);
+		LogInfoF("NtCreateSection Ptr : %p", __imp_NtCreateSection);
+		LogInfoF("NtCreateFile Ptr : %p", __imp_NtCreateFile);
+		LogInfoF("ZwCreateSection Ptr : %p", __imp_ZwCreateSection);
+		LogInfoF("NtCreateSectionEx Ptr : %p", __imp_NtCreateSectionEx);
+		LogInfoF("NtMapViewOfSection Ptr : %p", __imp_NtMapViewOfSection);
+		LogInfoF("NtCreateUserProcess Ptr : %p", __imp_NtCreateUserProcess);
+		LogInfoF("NtSetInformationFile Ptr : %p", __imp_NtSetInformationFile);
+
 		// NOLINTBEGIN 
 		DetourAttach(&(PVOID&)RealCreateProcessInternalW, HookCreateProcessInternalW);
 		DetourAttach(&(PVOID&)RealExitProcess, HookExitProcess);
