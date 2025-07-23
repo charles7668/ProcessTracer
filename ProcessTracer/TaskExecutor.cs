@@ -66,7 +66,10 @@ namespace ProcessTracer
                 }, TaskCreationOptions.LongRunning).Unwrap());
             }
 
-            return Task.WhenAll(tasks).ContinueWith(_ => taskManager.StopTaskExecutor(true), CancellationToken.None);
+            return Task.WhenAll(tasks).ContinueWith(async _ =>
+            {
+                await taskManager.StopTaskExecutor(true);
+            }, CancellationToken.None).Unwrap();
         }
     }
 }
