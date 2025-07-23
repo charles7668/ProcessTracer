@@ -363,7 +363,7 @@ NTSTATUS __stdcall HookNtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAcces
 		EaLength
 	);
 	auto hook_info = GetHookInfoInstance();
-	if (*FileHandle && ObjectAttributes->ObjectName->Length > 0 && IsWriteAccess(DesiredAccess, CreateDisposition) &&
+	if (*FileHandle && ObjectAttributes->ObjectName->Length > 0 &&
 		!EndsWith(ConvertWStringToString(ObjectAttributes->ObjectName->Buffer),
 		          "ProcessTracerPipe:" + std::string(hook_info->process_tracer_pid_string_buffer)))
 	{
