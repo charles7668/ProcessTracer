@@ -1,6 +1,6 @@
 ﻿using CommandLine;
 using System.Diagnostics;
-using System.IO.Pipes;
+using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 using System.Text;
 using Windows.Win32;
@@ -15,7 +15,7 @@ namespace ProcessTracer
 
         private static Logger _Logger = null!;
 
-        private static int _ChildPid;
+        public static int ChildPid;
 
         public static unsafe bool CanElevate()
         {
@@ -41,25 +41,6 @@ namespace ProcessTracer
                 Console.Error.WriteLine(error.ToString());
 
             Environment.Exit(1);
-        }
-
-        public static async Task OnStopRequestAsync()
-        {
-            Console.WriteLine(@"Stop signal received");
-            if (_ChildPid == 0)
-                return;
-            await using var pipeClient =
-                new NamedPipeClientStream(".", "ProcessTracer:" + _ChildPid, PipeDirection.Out,
-                    PipeOptions.Asynchronous);
-            _ChildPid = 0;
-
-            await pipeClient.ConnectAsync(1000);
-            if (pipeClient.IsConnected)
-            {
-                await using var writer = new StreamWriter(pipeClient);
-                writer.AutoFlush = true;
-                await writer.WriteLineAsync("[CloseApp]");
-            }
         }
 
         private static void Main(string[] args)
@@ -145,10 +126,30 @@ namespace ProcessTracer
                     _Logger,
                     cts.Token, line =>
                     {
-                        if (line.StartsWith("[ChildProcess] "))
+                        if (line == "[CloseApp]")
+                        {
+                            Console.WriteLine(@"Try write stop signal to file , Global\\ProcessTracerMapFile:" +
+                                              ChildPid);
+                            try
+                            {
+                                var mmfile = MemoryMappedFile.CreateNew("Local\\ProcessTracerMapFile:" + ChildPid, 4,
+                                    MemoryMappedFileAccess.ReadWrite);
+                                using var accessor = mmfile.CreateViewAccessor();
+                                string message = "stop";
+                                byte[] data = Encoding.UTF8.GetBytes(message);
+                                accessor.Write(0, data.Length);
+                                Console.WriteLine(@"Write stop signal success");
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.Error.WriteLine(
+                                    "Failed to write stop signal to Local\\ProcessTracerMapFile: " + ex.Message);
+                            }
+                        }
+                        else if (line.StartsWith("[ChildProcess] "))
                         {
                             string childPidString = line.Substring("[ChildProcess] ".Length);
-                            _ChildPid = int.Parse(childPidString);
+                            ChildPid = int.Parse(childPidString);
                         }
 
                         return Task.FromResult(true);

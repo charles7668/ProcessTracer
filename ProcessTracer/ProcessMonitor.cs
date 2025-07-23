@@ -2,11 +2,13 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO.MemoryMappedFiles;
 using System.IO.Pipes;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using Windows.Win32;
 using Windows.Win32.System.Threading;
 
@@ -111,6 +113,32 @@ namespace ProcessTracer
 
                     return true;
                 });
+            Task stopSignalListenTask = Task.Factory.StartNew(() =>
+            {
+                logger.Log("Read from Global\\ProcessTracerMapFile:" + Process.GetCurrentProcess().Id);
+                while (true)
+                {
+                    try
+                    {
+                        using var mmf =
+                            MemoryMappedFile.OpenExisting("Local\\ProcessTracerMapFile:" +
+                                                          Process.GetCurrentProcess().Id);
+                        using MemoryMappedViewAccessor accessor = mmf.CreateViewAccessor();
+                        int length = accessor.ReadInt32(0);
+                        logger.Log("Read from Local\\ProcessTracerMapFile:" + Process.GetCurrentProcess().Id + " , " +
+                                   length);
+                        stopSignal = true;
+                        cancellationTokenSource.Cancel();
+                        return;
+
+                        Thread.Sleep(1000);
+                    }
+                    catch (Exception ex)
+                    {
+                        // logger.LogError(ex.Message);
+                    }
+                }
+            } , TaskCreationOptions.LongRunning);
 
             AddProcessToMonitor((int)pi.dwProcessId);
             PInvoke.ResumeThread(pi.hThread);
