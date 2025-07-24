@@ -46,3 +46,51 @@ bool EndsWith(const std::string& str, const std::string& suffix) {
     return str.size() >= suffix.size() &&
            str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
+
+std::wstring ReplaceWString(std::wstring origin, std::wstring find, std::wstring replace)
+{
+	auto result = origin;
+	size_t pos = 0;
+	while ((pos = result.find(find, pos)) != std::wstring::npos)
+	{
+		result.replace(pos, find.length(), replace);
+		pos += replace.length();
+	}
+	return result;
+}
+
+std::wstring ConvertStringToWString(const std::string& origin , UINT code_page)
+{
+	int wide_char_len = MultiByteToWideChar(
+		code_page,
+		0,
+		origin.c_str(),
+		-1,
+		nullptr,
+		0
+	);
+
+	if (wide_char_len == 0)
+	{
+		return L"";
+	}
+
+	std::wstring wide_str(wide_char_len, L'\0');
+
+	int result = MultiByteToWideChar(
+		code_page,
+		0,
+		origin.c_str(),
+		-1,
+		const_cast<LPWSTR>(wide_str.data()),
+		wide_char_len
+	);
+
+	if (result == 0)
+	{
+		return L"";
+	}
+	if (!wide_str.empty())
+		wide_str.pop_back();
+	return wide_str;
+}

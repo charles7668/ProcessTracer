@@ -208,6 +208,19 @@ void LogHookInfo(const char* hook_func_name, const char* msg)
 	auto _ = ProcessTracer::Logger::g_logger.HookInfo(hook_func_name, msg);
 }
 
+void LogHookInfoF(const char* hook_func_name, const char* msg, ...)
+{
+	char buffer[1024];
+	va_list args;
+	va_start(args, msg);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+	auto _ = vsnprintf(buffer, sizeof(buffer), msg, args);
+#pragma clang diagnostic pop
+	va_end(args);
+	LogHookInfo(hook_func_name, buffer);
+}
+
 void LogHookNtCreateProcessInfo(const char* hook_func_name, const char* msg)
 {
 	auto _ = ProcessTracer::Logger::g_logger.HookNtCreateProcessInfo(hook_func_name, msg);
@@ -216,4 +229,17 @@ void LogHookNtCreateProcessInfo(const char* hook_func_name, const char* msg)
 void LogHookError(const char* hook_func_name, const char* msg)
 {
 	auto _ = ProcessTracer::Logger::g_logger.HookError(hook_func_name, msg);
+}
+
+void LogHookErrorF(const char* hook_func_name, const char* msg, ...)
+{
+	char buffer[1024];
+	va_list args;
+	va_start(args, msg);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+	auto _ = vsnprintf(buffer, sizeof(buffer), msg, args);
+#pragma clang diagnostic pop
+	va_end(args);
+	LogHookError(hook_func_name, buffer);
 }

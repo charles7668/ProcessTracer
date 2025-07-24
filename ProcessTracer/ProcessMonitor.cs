@@ -20,7 +20,15 @@ namespace ProcessTracer
 
         private void AddProcessToMonitor(int pid)
         {
-            _trackProcesses.TryAdd(pid, Process.GetProcessById(pid));
+            try
+            {
+                var proc = Process.GetProcessById(pid);
+                _trackProcesses.TryAdd(pid, proc);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Failed to add process {pid} to monitor: {ex.Message}");
+            }
         }
 
         private void RemoveProcessFromMonitor(int pid)
@@ -43,18 +51,22 @@ namespace ProcessTracer
             string commandLine = "\"" + options.Executable + "\" " + options.Arguments;
             byte[] commandLineBytes = Encoding.Unicode.GetBytes(commandLine + "\0");
             string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ProcessTracerCore32.dll");
+            Console.WriteLine(@"Dll path : " + dllPath);
             Win32.CreationFlag creationFlags =
                 Win32.CreationFlag.CREATE_SUSPENDED | Win32.CreationFlag.CREATE_DEFAULT_ERROR_MODE;
             byte[] ansiDllBytes = Encoding.Default.GetBytes(dllPath + '\0');
             IntPtr strPtr = Marshal.AllocHGlobal(ansiDllBytes.Length);
             Marshal.Copy(ansiDllBytes, 0, strPtr, ansiDllBytes.Length);
             var dllPtrs = new List<IntPtr>
-                { strPtr };
+            {
+                strPtr
+            };
             IntPtr dllArray = Marshal.AllocHGlobal(IntPtr.Size * dllPtrs.Count);
             for (int i = 0; i < dllPtrs.Count; i++)
             {
                 Marshal.WriteIntPtr(dllArray, i * IntPtr.Size, dllPtrs[i]);
             }
+
             Console.WriteLine("Command Line : " + commandLine);
             bool result = DetoursLoader.DetourCreateProcessWithDllWWrap(
                 appNameBytes,
@@ -75,6 +87,7 @@ namespace ProcessTracer
                 {
                     return true;
                 }
+
                 await logger.LogErrorAsync("Failed to create process with DLL", CancellationToken.None);
                 return false;
             }
@@ -82,6 +95,7 @@ namespace ProcessTracer
             var cancellationTokenSource = new CancellationTokenSource();
             var needAdminCancellationTokenSource = new CancellationTokenSource();
             bool stopSignal = false;
+            bool waitChild = false;
 
             Task loggingTask = TaskExecutor.StartNamedPipeReceiveTaskAsync("ProcessTracerPipe:" + pid, logger,
                 cancellationTokenSource.Token, async (line) =>
@@ -92,9 +106,22 @@ namespace ProcessTracer
                         await cancellationTokenSource.CancelAsync();
                         return true;
                     }
+
+                    if (line.StartsWith("[ChildProcess] "))
+                    {
+                        waitChild = false;
+                        string childPidString = line.Substring("[ChildProcess] ".Length);
+                        Program.ChildPid = int.Parse(childPidString);
+                        AddProcessToMonitor(Program.ChildPid);
+                    }
+
                     var lines = line.Split(' ');
                     var checkLine = string.Join(" ", lines[1..]);
-                    if (checkLine == "[Info] Permission Request")
+                    if (checkLine == "[Hook] ShellExecuteExW [Info] Permission Request")
+                    {
+                        waitChild = true;
+                    }
+                    else if (checkLine == "[Info] Permission Request")
                     {
                         await needAdminCancellationTokenSource.CancelAsync();
                     }
@@ -138,7 +165,7 @@ namespace ProcessTracer
                         // logger.LogError(ex.Message);
                     }
                 }
-            } , TaskCreationOptions.LongRunning);
+            }, TaskCreationOptions.LongRunning);
 
             AddProcessToMonitor((int)pi.dwProcessId);
             PInvoke.ResumeThread(pi.hThread);
@@ -146,7 +173,9 @@ namespace ProcessTracer
             {
                 await Task.Run(async () =>
                 {
-                    while (_trackProcesses.Count > 0 && !needAdminCancellationTokenSource.Token.IsCancellationRequested && !stopSignal)
+                    while (waitChild || (_trackProcesses.Count > 0
+                                         && !needAdminCancellationTokenSource.Token.IsCancellationRequested
+                                         && !stopSignal))
                     {
                         await Task.Delay(100, needAdminCancellationTokenSource.Token);
                         List<int> removePending = [];
@@ -188,6 +217,7 @@ namespace ProcessTracer
                         trackProcess.Value.Kill();
                 }
 
+                //
                 return !stopSignal;
             }
 

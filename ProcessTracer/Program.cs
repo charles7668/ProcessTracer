@@ -90,6 +90,7 @@ namespace ProcessTracer
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+        private static MemoryMappedFile _argsMMF;
         private static void StartMonitor(RunOptions options)
         {
             if (!string.IsNullOrEmpty(options.OutputFile) && !string.IsNullOrEmpty(options.OutputErrorFilePath))
@@ -101,6 +102,19 @@ namespace ProcessTracer
                     Console.Error.WriteLine("Output and error files must be different.");
                     return;
                 }
+            }
+
+            Console.WriteLine(@"Create Map File : " + @"Local\ProcessTracerArgs:" +
+                              Process.GetCurrentProcess().Id);
+            _argsMMF = MemoryMappedFile.CreateNew("ProcessTracerArgs:" + Process.GetCurrentProcess().Id, 1024,
+                MemoryMappedFileAccess.ReadWrite);
+            using (MemoryMappedViewAccessor accessor = _argsMMF.CreateViewAccessor())
+            {
+                List<string> newArgs = ["--parent " + Process.GetCurrentProcess().Id];
+                string message = string.Join(" ", newArgs);
+                accessor.Write(0, message.Length);
+                byte[] data = Encoding.UTF8.GetBytes(message);
+                accessor.WriteArray(sizeof(int), data, 0, data.Length);
             }
 
             if (options.HideConsole)

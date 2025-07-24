@@ -432,15 +432,74 @@ BOOL WINAPI HookShellExecuteExW(SHELLEXECUTEINFOW* pExecInfo)
 {
 	auto verb = ConvertWStringToString(pExecInfo->lpVerb);
 	std::string msg = "verb:" + verb;
-	LogHookInfo("ShellExecuteExW", msg.c_str());
+	const char* hook_func_name = "ShellExecuteExW";
+	LogHookInfo(hook_func_name, msg.c_str());
 	auto hook_info = GetHookInfoInstance();
 	if (hook_info->can_elevate && StartsWith(verb, "runas"))
 	{
-		LogHookError("ShellExecuteExW",
-			"ProcessTracerCore can elevate, but ShellExecuteExW called with runas verb.");
-		LogInfo(permission_request_str);
-		TerminateProcess(GetCurrentProcess(), 0);
-		return FALSE;
+		auto map_name = std::string("ProcessTracerArgs:") + std::to_string(hook_info->process_tracer_pid);
+		constexpr DWORD capacity = 1024;
+
+		HANDLE h_map = nullptr;
+		LPVOID lp_base = nullptr;
+		h_map = OpenFileMappingA(
+			FILE_MAP_READ,
+			FALSE, 
+			map_name.c_str()
+		);
+
+		if (h_map == nullptr) {
+			LogHookErrorF(hook_func_name, "Error opening file mapping: %d", GetLastError());
+			return FALSE;
+		}
+
+		lp_base = MapViewOfFile(
+			h_map,
+			FILE_MAP_READ, 
+			0,
+			0,
+			capacity
+		);
+
+		if (lp_base == nullptr) {
+			LogHookErrorF(hook_func_name,"Error mapping view of file: %d", GetLastError());
+			CloseHandle(h_map);
+			return FALSE;
+		}
+		char* data = static_cast<char*>(lp_base);
+		int messageLength = *reinterpret_cast<int*>(data);
+		if (messageLength < 0 || messageLength >(capacity - sizeof(int))) {
+			LogHookErrorF(hook_func_name, "Invalid message length read: %d", messageLength);
+			messageLength = 0;
+		}
+		std::string received_message(data + sizeof(int), messageLength);
+
+		std::wstring origin_dir = pExecInfo->lpDirectory;
+		LogHookInfo(hook_func_name, ConvertWStringToString((L"Origin Dir : " + origin_dir).c_str()).c_str());
+		std::wstring origin_file = pExecInfo->lpFile;
+		std::wstring origin_parameter = pExecInfo->lpParameters;
+		std::wstring new_args = ConvertStringToWString(received_message) + L" -a\"" + ReplaceWString(
+			origin_parameter, L"\"", L"\\\"") + L"\" -f\"" + origin_file + L"\"";
+
+		std::string dll_path = std::string(hook_info->dll_path);
+		size_t last_slash_pos = dll_path.find_last_of("\\/");
+		dll_path = dll_path.substr(0, last_slash_pos + 1) + "Launcher.exe";
+		std::wstring module_name = ConvertStringToWString(dll_path);
+		LogHookInfo(hook_func_name, ConvertWStringToString((L"module name : " + module_name).c_str()).c_str());
+		pExecInfo->lpFile = module_name.c_str();
+		pExecInfo->lpParameters = new_args.c_str();
+
+		LogHookInfo(hook_func_name, ConvertWStringToString(new_args.c_str()).c_str());
+
+		auto res = RealShellExecuteExW(pExecInfo);
+		if (res == FALSE)
+		{
+			auto err = GetLastError();
+			LogHookErrorF(hook_func_name, "Err : %d", err);
+			return FALSE;
+		}
+		LogHookInfo(hook_func_name, "Permission Request");
+		return TRUE;
 	}
 	return RealShellExecuteExW(pExecInfo);
 }
