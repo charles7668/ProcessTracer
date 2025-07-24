@@ -117,9 +117,13 @@ namespace ProcessTracer
 
                     var lines = line.Split(' ');
                     var checkLine = string.Join(" ", lines[1..]);
-                    if (checkLine == "[Hook] ShellExecuteExW [Info] Permission Request")
+                    if (checkLine == "[Hook] ShellExecuteExW [Info] Start HookShellExecuteW")
                     {
                         waitChild = true;
+                    }
+                    else if (checkLine == "[Hook] ShellExecuteExW [Info] Error HookShellExecuteW")
+                    {
+                        waitChild = false;
                     }
                     else if (checkLine == "[Info] Permission Request")
                     {
@@ -173,24 +177,31 @@ namespace ProcessTracer
             {
                 await Task.Run(async () =>
                 {
-                    while (waitChild || (_trackProcesses.Count > 0
-                                         && !needAdminCancellationTokenSource.Token.IsCancellationRequested
-                                         && !stopSignal))
+                    int tryCount = 0;
+                    while (tryCount < 10)
                     {
-                        await Task.Delay(100, needAdminCancellationTokenSource.Token);
-                        List<int> removePending = [];
-                        foreach (KeyValuePair<int, Process> trackProcess in _trackProcesses)
+                        while (waitChild || (_trackProcesses.Count > 0
+                                             && !needAdminCancellationTokenSource.Token.IsCancellationRequested
+                                             && !stopSignal))
                         {
-                            if (trackProcess.Value.HasExited)
+                            await Task.Delay(100, needAdminCancellationTokenSource.Token);
+                            List<int> removePending = [];
+                            foreach (KeyValuePair<int, Process> trackProcess in _trackProcesses)
                             {
-                                removePending.Add(trackProcess.Key);
+                                if (trackProcess.Value.HasExited)
+                                {
+                                    removePending.Add(trackProcess.Key);
+                                }
+                            }
+
+                            foreach (int i in removePending)
+                            {
+                                RemoveProcessFromMonitor(i);
                             }
                         }
 
-                        foreach (int i in removePending)
-                        {
-                            RemoveProcessFromMonitor(i);
-                        }
+                        tryCount++;
+                        await Task.Delay(100, CancellationToken.None);
                     }
                 }, needAdminCancellationTokenSource.Token);
             }

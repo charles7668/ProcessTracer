@@ -437,6 +437,7 @@ BOOL WINAPI HookShellExecuteExW(SHELLEXECUTEINFOW* pExecInfo)
 	auto hook_info = GetHookInfoInstance();
 	if (hook_info->can_elevate && StartsWith(verb, "runas"))
 	{
+		LogHookInfo(hook_func_name, "Start HookShellExecuteW");
 		auto map_name = std::string("ProcessTracerArgs:") + std::to_string(hook_info->process_tracer_pid);
 		constexpr DWORD capacity = 1024;
 
@@ -492,13 +493,14 @@ BOOL WINAPI HookShellExecuteExW(SHELLEXECUTEINFOW* pExecInfo)
 		LogHookInfo(hook_func_name, ConvertWStringToString(new_args.c_str()).c_str());
 
 		auto res = RealShellExecuteExW(pExecInfo);
+		LogHookInfo(hook_func_name, "HookShellExecuteW Finished");
 		if (res == FALSE)
 		{
 			auto err = GetLastError();
+			LogHookInfo(hook_func_name, "Error HookShellExecuteW");
 			LogHookErrorF(hook_func_name, "Err : %d", err);
 			return FALSE;
 		}
-		LogHookInfo(hook_func_name, "Permission Request");
 		return TRUE;
 	}
 	return RealShellExecuteExW(pExecInfo);
