@@ -91,6 +91,7 @@ namespace ProcessTracer
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
         private static MemoryMappedFile _argsMMF;
+
         private static void StartMonitor(RunOptions options)
         {
             if (!string.IsNullOrEmpty(options.OutputFile) && !string.IsNullOrEmpty(options.OutputErrorFilePath))
@@ -148,10 +149,14 @@ namespace ProcessTracer
                             {
                                 var mmfile = MemoryMappedFile.CreateNew("Local\\ProcessTracerMapFile:" + ChildPid, 4,
                                     MemoryMappedFileAccess.ReadWrite);
-                                using var accessor = mmfile.CreateViewAccessor();
-                                string message = "stop";
-                                byte[] data = Encoding.UTF8.GetBytes(message);
-                                accessor.Write(0, data.Length);
+                                using (MemoryMappedViewAccessor accessor = mmfile.CreateViewAccessor())
+                                {
+                                    string message = "stop";
+                                    byte[] data = Encoding.UTF8.GetBytes(message);
+                                    accessor.Write(0, data.Length);
+                                    accessor.WriteArray(sizeof(int), data, 0, data.Length);
+                                }
+
                                 Console.WriteLine(@"Write stop signal success");
                             }
                             catch (Exception ex)
