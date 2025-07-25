@@ -2,24 +2,23 @@
 
 namespace ProcessTracer
 {
-    public struct TaskMessage
+    public record TaskMessage
     {
-        public string TaskName;
-        public string LogMessage;
+        public string TaskName { get; init; } = string.Empty;
+        public string LogMessage { get; init; } = string.Empty;
+        public int RetryCount { get; init; }
     }
 
     public class TaskManager
     {
-        private readonly ConcurrentQueue<TaskMessage> _taskQueue = new();
+        private readonly BlockingCollection<TaskMessage> _taskQueue = new(new ConcurrentQueue<TaskMessage>());
         private CancellationTokenSource _cancellationTokenSource = new();
 
         private Task? _executorTask;
 
-        private bool _lockEnqueue = false;
-
         public bool StartTaskExecutor(int workerCount, Func<TaskMessage, CancellationToken, Task> task)
         {
-            if (_executorTask is { IsCanceled: true } or { IsCompleted: true })
+            if (_executorTask?.IsCompleted == false)
             {
                 return false;
             }
@@ -29,61 +28,69 @@ namespace ProcessTracer
             CancellationToken cancellationToken = _cancellationTokenSource.Token;
             for (int i = 0; i < workerCount; i++)
             {
-                tasks.Add(Task.Factory.StartNew(() =>
+                tasks.Add(Task.Factory.StartNew(async () =>
                 {
-                    return Task.Run(async () =>
+                    foreach (TaskMessage taskMessage in _taskQueue.GetConsumingEnumerable(cancellationToken))
                     {
-                        while (!cancellationToken.IsCancellationRequested)
+                        try
                         {
-                            if (_taskQueue.TryDequeue(out TaskMessage taskMessage))
-                            {
-                                try
-                                {
-                                    await task(taskMessage, cancellationToken);
-                                }
-                                catch
-                                {
-                                    // if the task fails, try it again
-                                    EnqueueTask(taskMessage.TaskName, taskMessage.LogMessage);
-                                }
-                            }
-
-                            await Task.Delay(1, cancellationToken);
+                            await task(taskMessage, cancellationToken);
                         }
-                    }, cancellationToken);
-                }, TaskCreationOptions.LongRunning));
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
+                        catch (Exception)
+                        {
+                            int retryCount = taskMessage.RetryCount;
+                            if (retryCount < 3)
+                            {
+                                EnqueueTask(taskMessage with
+                                {
+                                    RetryCount = retryCount + 1
+                                });
+                            }
+                        }
+                    }
+                }, TaskCreationOptions.LongRunning).Unwrap());
             }
 
-            _lockEnqueue = false;
             _executorTask = Task.WhenAll(tasks);
             return true;
         }
 
-        public async Task StopTaskExecutor(bool waitComplete = false)
+        public async Task StopTaskExecutor(bool processRemaining = false)
         {
-            _lockEnqueue = true;
-            if (waitComplete)
+            if (_executorTask is null)
+                return;
+            _taskQueue.CompleteAdding();
+
+            if (!processRemaining)
             {
-                while (_taskQueue.Count > 0)
-                {
-                    await Task.Delay(100);
-                }
+                await _cancellationTokenSource.CancelAsync();
             }
 
-            await _cancellationTokenSource.CancelAsync();
             try
             {
-                _executorTask?.Wait();
+                await _executorTask;
             }
-            catch (AggregateException ex)
+            catch (OperationCanceledException)
             {
-                ex.Handle(x => x is TaskCanceledException);
             }
+
+            _cancellationTokenSource.Dispose();
+        }
+
+        private void EnqueueTask(TaskMessage taskMessage)
+        {
+            if (_taskQueue.IsAddingCompleted)
+                return;
+            _taskQueue.Add(taskMessage);
         }
 
         public void EnqueueTask(string taskName, string logMessage)
         {
-            _taskQueue.Enqueue(new TaskMessage
+            EnqueueTask(new TaskMessage
             {
                 TaskName = taskName,
                 LogMessage = logMessage
