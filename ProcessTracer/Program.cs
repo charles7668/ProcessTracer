@@ -139,7 +139,7 @@ namespace ProcessTracer
                 TaskExecutor.StartNamedPipeReceiveTaskAsync(
                     "ProcessTracerPipe:" + Process.GetCurrentProcess().Id,
                     _Logger,
-                    cts.Token, line =>
+                    line =>
                     {
                         if (line == "[CloseApp]")
                         {
@@ -172,7 +172,7 @@ namespace ProcessTracer
                         }
 
                         return Task.FromResult(true);
-                    }).ConfigureAwait(false).GetAwaiter().GetResult();
+                    },cts.Token).ConfigureAwait(false).GetAwaiter().GetResult();
                 elevateTask.Wait(CancellationToken.None);
             }
 

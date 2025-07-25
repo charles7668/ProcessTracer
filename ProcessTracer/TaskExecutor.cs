@@ -1,75 +1,81 @@
 ﻿using System.IO.Pipes;
-using System.Security.AccessControl;
-using System.Security.Principal;
 
 namespace ProcessTracer
 {
     public static class TaskExecutor
     {
-        public static Task StartNamedPipeReceiveTaskAsync(string pipeName, Logger logger,
-            CancellationToken cancellationToken, Func<string, Task<bool>> receiveLineCallback)
+        private static async Task RunPipeServerInstanceAsync(string pipeName, TaskManager taskManager,
+            Func<string, Task<bool>> receiveLineCallback, CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await using var pipeServer = new NamedPipeServerStream(
+                        pipeName,
+                        PipeDirection.In,
+                        NamedPipeServerStream.MaxAllowedServerInstances,
+                        PipeTransmissionMode.Byte,
+                        PipeOptions.Asynchronous | PipeOptions.WriteThrough
+                    );
+
+                    await pipeServer.WaitForConnectionAsync(cancellationToken);
+
+                    using var reader = new StreamReader(pipeServer);
+                    while (await reader.ReadLineAsync(cancellationToken) is { } line)
+                    {
+                        taskManager.EnqueueTask("Log", "Received: " + line);
+                        if (!await receiveLineCallback(line))
+                        {
+                            return;
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception)
+                {
+                    await Task.Delay(100, CancellationToken.None);
+                }
+            }
+        }
+
+        public static async Task StartNamedPipeReceiveTaskAsync(string pipeName, Logger logger,
+            Func<string, Task<bool>> receiveLineCallback, CancellationToken cancellationToken)
         {
             int threadCount = Environment.ProcessorCount;
             var tasks = new List<Task>(threadCount);
             TaskManager taskManager = new();
             taskManager.StartTaskExecutor(threadCount, (msg, token) =>
             {
-                switch (msg.TaskName)
+                return msg.TaskName switch
                 {
-                    case "Log":
-                        return logger.LogAsync(msg.LogMessage, token);
-                    case "Error":
-                        return logger.LogErrorAsync(msg.LogMessage, token);
-                }
-
-                return Task.CompletedTask;
+                    "Log" => logger.LogAsync(msg.LogMessage, token),
+                    "Error" => logger.LogErrorAsync(msg.LogMessage, token),
+                    _ => Task.CompletedTask
+                };
             });
             for (int i = 0; i < threadCount; i++)
             {
-                tasks.Add(Task.Factory.StartNew(() =>
-                {
-                    return Task.Run(async () =>
-                    {
-                        while (true)
-                        {
-                            await using var pipeServer = new NamedPipeServerStream(
-                                pipeName,
-                                PipeDirection.In,
-                                NamedPipeServerStream.MaxAllowedServerInstances,
-                                PipeTransmissionMode.Byte,
-                                PipeOptions.Asynchronous | PipeOptions.WriteThrough
-                            );
-                            await pipeServer.WaitForConnectionAsync(cancellationToken);
-                            if (cancellationToken.IsCancellationRequested)
-                                return;
-
-                            var reader = new StreamReader(pipeServer);
-                            try
-                            {
-                                while (await reader.ReadLineAsync(cancellationToken) is { } line)
-                                {
-                                    bool needContinue = await receiveLineCallback(line);
-                                    if (!needContinue)
-                                        return;
-                                    taskManager.EnqueueTask("Log", "Received: " + line);
-                                }
-                            }
-                            catch
-                            {
-                                // ignore
-                            }
-
-                            if (cancellationToken.IsCancellationRequested)
-                                return;
-                        }
-                    }, cancellationToken);
-                }, TaskCreationOptions.LongRunning).Unwrap());
+                tasks.Add(Task.Factory
+                    .StartNew(
+                        () => RunPipeServerInstanceAsync(pipeName, taskManager, receiveLineCallback, cancellationToken),
+                        TaskCreationOptions.LongRunning).Unwrap());
             }
 
-            return Task.WhenAll(tasks).ContinueWith(async _ =>
+            try
+            {
+                await Task.WhenAll(tasks);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
             {
                 await taskManager.StopTaskExecutor(true);
-            }, CancellationToken.None).Unwrap();
+            }
         }
     }
 }

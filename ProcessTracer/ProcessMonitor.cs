@@ -98,7 +98,7 @@ namespace ProcessTracer
             bool waitChild = false;
 
             Task loggingTask = TaskExecutor.StartNamedPipeReceiveTaskAsync("ProcessTracerPipe:" + pid, logger,
-                cancellationTokenSource.Token, async (line) =>
+                async (line) =>
                 {
                     if (line == "[CloseApp]")
                     {
@@ -143,7 +143,7 @@ namespace ProcessTracer
                     }
 
                     return true;
-                });
+                }, cancellationTokenSource.Token);
             Task stopSignalListenTask = Task.Factory.StartNew(() =>
             {
                 logger.Log("Read from Global\\ProcessTracerMapFile:" + Process.GetCurrentProcess().Id);

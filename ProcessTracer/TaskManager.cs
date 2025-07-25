@@ -9,7 +9,7 @@ namespace ProcessTracer
         public int RetryCount { get; init; }
     }
 
-    public class TaskManager
+    public class TaskManager : IAsyncDisposable
     {
         private readonly BlockingCollection<TaskMessage> _taskQueue = new(new ConcurrentQueue<TaskMessage>());
         private CancellationTokenSource _cancellationTokenSource = new();
@@ -95,6 +95,24 @@ namespace ProcessTracer
                 TaskName = taskName,
                 LogMessage = logMessage
             });
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await CastAndDispose(_taskQueue);
+            await CastAndDispose(_cancellationTokenSource);
+            if (_executorTask != null)
+                await CastAndDispose(_executorTask);
+
+            return;
+
+            static async ValueTask CastAndDispose(IDisposable resource)
+            {
+                if (resource is IAsyncDisposable resourceAsyncDisposable)
+                    await resourceAsyncDisposable.DisposeAsync();
+                else
+                    resource.Dispose();
+            }
         }
     }
 }
