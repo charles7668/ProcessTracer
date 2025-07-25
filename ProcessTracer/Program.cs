@@ -13,8 +13,6 @@ namespace ProcessTracer
     {
         private static readonly List<string> _OriginalArgs = [];
 
-        private static Logger _Logger = null!;
-
         public static int ChildPid;
 
         public static unsafe bool CanElevate()
@@ -124,10 +122,10 @@ namespace ProcessTracer
                 ShowWindow(hWnd, 0);
             }
 
-            _Logger = new Logger(options);
+            using var logger = new Logger(options);
 
             if (options.Parent != 0)
-                _Logger.Log("[ChildProcess] " + Process.GetCurrentProcess().Id);
+                logger.Log("[ChildProcess] " + Process.GetCurrentProcess().Id);
 
             void WaitElevate()
             {
@@ -138,7 +136,7 @@ namespace ProcessTracer
                 }, TaskCreationOptions.LongRunning).ContinueWith(_ => cts.Cancel(), CancellationToken.None);
                 TaskExecutor.StartNamedPipeReceiveTaskAsync(
                     "ProcessTracerPipe:" + Process.GetCurrentProcess().Id,
-                    _Logger,
+                    logger,
                     line =>
                     {
                         if (line == "[CloseApp]")
@@ -182,7 +180,7 @@ namespace ProcessTracer
             }
             else
             {
-                ProcessMonitor monitor = new(options, _Logger);
+                ProcessMonitor monitor = new(options, logger);
                 bool needRestart = monitor.Start().ConfigureAwait(false).GetAwaiter().GetResult();
                 if (needRestart && CanElevate())
                 {

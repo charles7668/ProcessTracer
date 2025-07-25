@@ -2,12 +2,12 @@
 
 namespace ProcessTracer
 {
-    public class Logger
+    public class Logger : IAsyncDisposable, IDisposable
     {
         public Logger(RunOptions options)
         {
-            _output = options.OutputFile;
-            _errorFile = options.OutputErrorFilePath;
+            string output = options.OutputFile;
+            string errorFile = options.OutputErrorFilePath;
             if (options.Parent != 0)
             {
                 LogDelegate = CreateParentLogger(options.Parent);
@@ -15,38 +15,56 @@ namespace ProcessTracer
             }
             else
             {
-                if (string.IsNullOrEmpty(_output))
+                if (string.IsNullOrEmpty(output))
                     LogDelegate = LogToConsole;
                 else
                 {
+                    _outStreamWriter = new StreamWriter(output, true);
                     LogDelegate = LogToFile;
-                    if (!File.Exists(_output))
-                    {
-                        using (File.Create(_output)) ;
-                    }
                 }
 
-                if (string.IsNullOrEmpty(_errorFile))
+                if (string.IsNullOrEmpty(errorFile))
                     ErrorLogDelegate = ErrorToConsole;
                 else
                 {
+                    _errorStreamWriter = new StreamWriter(errorFile, true);
                     ErrorLogDelegate = ErrorToFile;
-                    if (!File.Exists(_errorFile))
-                    {
-                        using (File.Create(_errorFile)) ;
-                    }
                 }
             }
         }
 
-        private readonly string _output;
-        private readonly string _errorFile;
+        private readonly StreamWriter? _errorStreamWriter;
 
-        private Func<string, CancellationToken, Task> LogDelegate { get; set; }
-        private Func<string, CancellationToken, Task> ErrorLogDelegate { get; set; }
+        private readonly StreamWriter? _outStreamWriter;
+        private readonly SemaphoreSlim _writeErrorSemaphore = new(1, 1);
 
         private readonly SemaphoreSlim _writeOutputSemaphore = new(1, 1);
-        private readonly SemaphoreSlim _writeErrorSemaphore = new(1, 1);
+
+        private Func<string, CancellationToken, Task> LogDelegate { get; }
+        private Func<string, CancellationToken, Task> ErrorLogDelegate { get; }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_outStreamWriter != null) await _outStreamWriter.DisposeAsync();
+            if (_errorStreamWriter != null) await _errorStreamWriter.DisposeAsync();
+            await CastAndDispose(_writeOutputSemaphore);
+            await CastAndDispose(_writeErrorSemaphore);
+
+            return;
+
+            static async ValueTask CastAndDispose(IDisposable resource)
+            {
+                if (resource is IAsyncDisposable resourceAsyncDisposable)
+                    await resourceAsyncDisposable.DisposeAsync();
+                else
+                    resource.Dispose();
+            }
+        }
+
+        public void Dispose()
+        {
+            DisposeAsync().GetAwaiter().GetResult();
+        }
 
         private Task LogToConsole(string message, CancellationToken cancellationToken)
         {
@@ -64,7 +82,7 @@ namespace ProcessTracer
         {
             return async (message, cancellationToken) =>
             {
-                message = message.StartsWith("Received: ") ? message.Substring("Received: ".Length) : message;   
+                message = message.StartsWith("Received: ") ? message.Substring("Received: ".Length) : message;
                 string pipeName = "ProcessTracerPipe:" + parentPid;
                 await using var pipeClient =
                     new NamedPipeClientStream(".", pipeName, PipeDirection.Out,
@@ -85,8 +103,8 @@ namespace ProcessTracer
             await _writeOutputSemaphore.WaitAsync(CancellationToken.None);
             try
             {
-                await using var writer = new StreamWriter(_output, append: true);
-                await writer.WriteLineAsync(message);
+                if (_outStreamWriter != null)
+                    await _outStreamWriter.WriteLineAsync(message);
             }
             finally
             {
@@ -99,8 +117,8 @@ namespace ProcessTracer
             await _writeErrorSemaphore.WaitAsync(CancellationToken.None);
             try
             {
-                await using var writer = new StreamWriter(_errorFile, append: true);
-                await writer.WriteLineAsync(message);
+                if (_errorStreamWriter != null)
+                    await _errorStreamWriter.WriteLineAsync(message);
             }
             finally
             {
