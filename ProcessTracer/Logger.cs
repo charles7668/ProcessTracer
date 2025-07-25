@@ -22,7 +22,7 @@ namespace ProcessTracer
                     LogDelegate = LogToFile;
                     if (!File.Exists(_output))
                     {
-                        using (File.Create(_errorFile)) ;
+                        using (File.Create(_output)) ;
                     }
                 }
 
