@@ -8,7 +8,7 @@ using Windows.Win32.System.Threading;
 
 namespace ProcessTracer
 {
-    public class ProcessMonitor : IAsyncDisposable
+    public class ProcessMonitor : IAsyncDisposable, IDisposable
     {
         public ProcessMonitor(RunOptions options, Logger logger)
         {
@@ -27,22 +27,14 @@ namespace ProcessTracer
         private readonly string _stopRequestMappedFileName;
         private readonly ConcurrentDictionary<int, Process> _trackProcesses = [];
 
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
-            foreach (Process process in _trackProcesses.Values)
-            {
-                try
-                {
-                    process.Dispose();
-                }
-                catch
-                {
-                    // ignore
-                }
-            }
+            await _logger.DisposeAsync();
+        }
 
-            _trackProcesses.Clear();
-            return ValueTask.CompletedTask;
+        public void Dispose()
+        {
+            DisposeAsync().GetAwaiter().GetResult();
         }
 
         public async Task<bool> Start()

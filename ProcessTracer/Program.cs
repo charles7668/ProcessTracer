@@ -12,26 +12,50 @@ namespace ProcessTracer
     internal static class Program
     {
         private static readonly List<string> _OriginalArgs = [];
+        private static MemoryMappedFile? _ArgsMmf;
 
-        public static int ChildPid;
+        public static int ChildPid { get; set; }
 
-        public static unsafe bool CanElevate()
+        private static void Main(string[] args)
         {
-            HANDLE hToken = HANDLE.Null;
-            TOKEN_ELEVATION_TYPE tokenType = TOKEN_ELEVATION_TYPE.TokenElevationTypeLimited;
-            if (!PInvoke.OpenProcessToken((HANDLE)Process.GetCurrentProcess().Handle,
-                    TOKEN_ACCESS_MASK.TOKEN_ALL_ACCESS,
-                    &hToken)) return false;
-            SafeHandleWrapper safeHandle = new(hToken.Value);
-            PInvoke.GetTokenInformation(safeHandle, TOKEN_INFORMATION_CLASS.TokenElevationType, &tokenType,
-                sizeof(TOKEN_ELEVATION_TYPE), out uint _);
-            PInvoke.CloseHandle(hToken);
-
-            return tokenType == TOKEN_ELEVATION_TYPE.TokenElevationTypeLimited;
+            try
+            {
+                InitializeApplication();
+                ProcessArguments(args);
+                ParseAndExecute(args);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Application error: {ex.Message}");
+                Environment.Exit(1);
+            }
+            finally
+            {
+                CleanupResources();
+            }
         }
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr GetConsoleWindow();
+        private static void InitializeApplication()
+        {
+            Console.OutputEncoding = Encoding.UTF8;
+        }
+
+        private static void ProcessArguments(string[] args)
+        {
+            foreach (string arg in args)
+            {
+                Console.WriteLine(arg);
+                string escapedArg = arg.Replace("\"", "\\\"");
+                _OriginalArgs.Add($"\"{escapedArg}\"");
+            }
+        }
+
+        private static void ParseAndExecute(string[] args)
+        {
+            Parser.Default.ParseArguments<RunOptions>(args)
+                .WithParsed(StartMonitor)
+                .WithNotParsed(HandleParseError);
+        }
 
         private static void HandleParseError(IEnumerable<Error> errors)
         {
@@ -41,150 +65,307 @@ namespace ProcessTracer
             Environment.Exit(1);
         }
 
-        private static void Main(string[] args)
+        private static void StartMonitor(RunOptions options)
         {
-            Console.OutputEncoding = Encoding.UTF8;
+            var validator = new OptionsValidator();
+            if (!validator.ValidateOptions(options))
+                return;
 
-            foreach (string s in args)
-            {
-                Console.WriteLine(s);
-                string temp = s.Replace("\"", "\\\"");
-                _OriginalArgs.Add("\"" + temp + "\"");
-            }
-
-            Parser.Default.ParseArguments<RunOptions>(args)
-                .WithParsed(StartMonitor)
-                .WithNotParsed(HandleParseError);
-        }
-
-        private static void RunElevate(string[] args, RunOptions options)
-        {
-            var newArgs = new List<string>(args)
-            {
-                "--parent " + Process.GetCurrentProcess().Id
-            };
-            ProcessStartInfo elevationInfo = new()
-            {
-                FileName = "launcher.exe",
-                UseShellExecute = true,
-                Verb = "runas",
-                Arguments = string.Join(" ", newArgs),
-                WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
-            };
+            var appContext = new ApplicationContext(options);
 
             try
             {
-                var proc = Process.Start(elevationInfo);
-                proc?.WaitForExit();
-                // Environment.Exit(0);
+                appContext.Initialize();
+
+                if (options.RunAs && CanElevate())
+                {
+                    ExecuteElevatedWorkflow(appContext);
+                }
+                else
+                {
+                    ExecuteNormalWorkflow(appContext);
+                }
             }
-            catch
+            finally
             {
-                Console.Error.WriteLine("process can't start with admin rights");
-                Environment.Exit(1);
+                appContext.Dispose();
             }
         }
 
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-        private static MemoryMappedFile _argsMMF;
-
-        private static void StartMonitor(RunOptions options)
+        private static void ExecuteElevatedWorkflow(ApplicationContext context)
         {
-            if (!string.IsNullOrEmpty(options.OutputFile) && !string.IsNullOrEmpty(options.OutputErrorFilePath))
+            var elevationHandler = new ElevationHandler(context, _OriginalArgs);
+            elevationHandler.WaitForElevation();
+        }
+
+        private static void ExecuteNormalWorkflow(ApplicationContext context)
+        {
+            using var monitor = new ProcessMonitor(context.Options, context.Logger);
+            bool needRestart = monitor.Start().ConfigureAwait(false).GetAwaiter().GetResult();
+
+            if (needRestart && CanElevate())
             {
-                string fullOutputFile = Path.GetFullPath(options.OutputFile);
-                string fullErrorFile = Path.GetFullPath(options.OutputErrorFilePath);
-                if (fullOutputFile == fullErrorFile)
+                var elevationHandler = new ElevationHandler(context, _OriginalArgs);
+                elevationHandler.WaitForElevation();
+            }
+        }
+
+        public static unsafe bool CanElevate()
+        {
+            HANDLE hToken = HANDLE.Null;
+            TOKEN_ELEVATION_TYPE tokenType = TOKEN_ELEVATION_TYPE.TokenElevationTypeLimited;
+
+            try
+            {
+                if (!PInvoke.OpenProcessToken(
+                        (HANDLE)Process.GetCurrentProcess().Handle,
+                        TOKEN_ACCESS_MASK.TOKEN_ALL_ACCESS,
+                        &hToken))
                 {
-                    Console.Error.WriteLine("Output and error files must be different.");
-                    return;
+                    return false;
                 }
+
+                using var safeHandle = new SafeHandleWrapper(hToken.Value);
+                PInvoke.GetTokenInformation(
+                    safeHandle,
+                    TOKEN_INFORMATION_CLASS.TokenElevationType,
+                    &tokenType,
+                    sizeof(TOKEN_ELEVATION_TYPE),
+                    out uint _);
+
+                return tokenType == TOKEN_ELEVATION_TYPE.TokenElevationTypeLimited;
+            }
+            finally
+            {
+                if (hToken != HANDLE.Null)
+                    PInvoke.CloseHandle(hToken);
+            }
+        }
+
+        private static void CleanupResources()
+        {
+            _ArgsMmf?.Dispose();
+        }
+
+        // 支援類別
+        private sealed class OptionsValidator
+        {
+            public bool ValidateOptions(RunOptions options)
+            {
+                if (!string.IsNullOrEmpty(options.OutputFile) &&
+                    !string.IsNullOrEmpty(options.OutputErrorFilePath))
+                {
+                    string fullOutputFile = Path.GetFullPath(options.OutputFile);
+                    string fullErrorFile = Path.GetFullPath(options.OutputErrorFilePath);
+
+                    if (fullOutputFile == fullErrorFile)
+                    {
+                        Console.Error.WriteLine("Output and error files must be different.");
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
+
+        private sealed class ApplicationContext(RunOptions options) : IDisposable
+        {
+            public RunOptions Options { get; } = options;
+            public Logger Logger { get; private set; } = null!;
+            public int CurrentProcessId { get; } = Process.GetCurrentProcess().Id;
+
+            public void Dispose()
+            {
+                Logger.Dispose();
+                _ArgsMmf?.Dispose();
             }
 
-            Console.WriteLine(@"Create Map File : " + @"Local\ProcessTracerArgs:" +
-                              Process.GetCurrentProcess().Id);
-            _argsMMF = MemoryMappedFile.CreateNew("ProcessTracerArgs:" + Process.GetCurrentProcess().Id, 1024,
-                MemoryMappedFileAccess.ReadWrite);
-            using (MemoryMappedViewAccessor accessor = _argsMMF.CreateViewAccessor())
+            public void Initialize()
             {
-                List<string> newArgs = ["--parent " + Process.GetCurrentProcess().Id];
-                string message = string.Join(" ", newArgs);
-                accessor.Write(0, message.Length);
+                CreateMemoryMappedFile();
+                ConfigureConsoleVisibility();
+                InitializeLogger();
+                LogChildProcessIfNeeded();
+            }
+
+            private void CreateMemoryMappedFile()
+            {
+                string mmfName = $"ProcessTracerArgs:{CurrentProcessId}";
+                Console.WriteLine($@"Create Map File: Local\{mmfName}");
+
+                _ArgsMmf = MemoryMappedFile.CreateNew(mmfName, 1024, MemoryMappedFileAccess.ReadWrite);
+
+                using MemoryMappedViewAccessor accessor = _ArgsMmf.CreateViewAccessor();
+                string message = $"--parent {CurrentProcessId}";
                 byte[] data = Encoding.UTF8.GetBytes(message);
+
+                accessor.Write(0, message.Length);
                 accessor.WriteArray(sizeof(int), data, 0, data.Length);
             }
 
-            if (options.HideConsole)
+            private void ConfigureConsoleVisibility()
+            {
+                if (Options.HideConsole)
+                {
+                    var consoleManager = new ConsoleManager();
+                    consoleManager.HideConsole();
+                }
+            }
+
+            private void InitializeLogger()
+            {
+                Logger = new Logger(Options);
+            }
+
+            private void LogChildProcessIfNeeded()
+            {
+                if (Options.Parent != 0)
+                {
+                    Logger.Log($"[ChildProcess] {CurrentProcessId}");
+                }
+            }
+        }
+
+        private sealed class ConsoleManager
+        {
+            [DllImport("kernel32.dll", SetLastError = true)]
+            private static extern IntPtr GetConsoleWindow();
+
+            [DllImport("user32.dll")]
+            private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+            public void HideConsole()
             {
                 IntPtr hWnd = GetConsoleWindow();
                 ShowWindow(hWnd, 0);
             }
+        }
 
-            using var logger = new Logger(options);
-
-            if (options.Parent != 0)
-                logger.Log("[ChildProcess] " + Process.GetCurrentProcess().Id);
-
-            void WaitElevate()
+        private sealed class ElevationHandler(ApplicationContext context, List<string> originalArgs)
+        {
+            public void WaitForElevation()
             {
-                var cts = new CancellationTokenSource();
-                Task elevateTask = Task.Factory.StartNew(() =>
-                {
-                    RunElevate(_OriginalArgs.ToArray(), options);
-                }, TaskCreationOptions.LongRunning).ContinueWith(_ => cts.Cancel(), CancellationToken.None);
-                TaskExecutor.StartNamedPipeReceiveTaskAsync(
-                    "ProcessTracerPipe:" + Process.GetCurrentProcess().Id,
-                    logger,
-                    line =>
+                using var cts = new CancellationTokenSource();
+
+                Task elevateTask = CreateElevationTask(cts);
+                Task pipeTask = CreatePipeMonitoringTask(cts);
+
+                Task.WaitAll([elevateTask, pipeTask], CancellationToken.None);
+            }
+
+            private Task CreateElevationTask(CancellationTokenSource cts)
+            {
+                return Task.Factory.StartNew(() =>
                     {
-                        if (line == "[CloseApp]")
-                        {
-                            Console.WriteLine(@"Try write stop signal to file , Global\\ProcessTracerMapFile:" +
-                                              ChildPid);
-                            try
-                            {
-                                var mmfile = MemoryMappedFile.CreateNew("Local\\ProcessTracerMapFile:" + ChildPid, 4,
-                                    MemoryMappedFileAccess.ReadWrite);
-                                using (MemoryMappedViewAccessor accessor = mmfile.CreateViewAccessor())
-                                {
-                                    string message = "stop";
-                                    byte[] data = Encoding.UTF8.GetBytes(message);
-                                    accessor.Write(0, data.Length);
-                                    accessor.WriteArray(sizeof(int), data, 0, data.Length);
-                                }
-
-                                Console.WriteLine(@"Write stop signal success");
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.Error.WriteLine(
-                                    "Failed to write stop signal to Local\\ProcessTracerMapFile: " + ex.Message);
-                            }
-                        }
-                        else if (line.StartsWith("[ChildProcess] "))
-                        {
-                            string childPidString = line.Substring("[ChildProcess] ".Length);
-                            ChildPid = int.Parse(childPidString);
-                        }
-
-                        return Task.FromResult(true);
-                    },cts.Token).ConfigureAwait(false).GetAwaiter().GetResult();
-                elevateTask.Wait(CancellationToken.None);
+                        RunElevated(originalArgs.ToArray());
+                    }, TaskCreationOptions.LongRunning)
+                    .ContinueWith(_ => cts.Cancel(), CancellationToken.None);
             }
 
-            if (options.RunAs && CanElevate())
+            private Task CreatePipeMonitoringTask(CancellationTokenSource cts)
             {
-                WaitElevate();
+                return TaskExecutor.StartNamedPipeReceiveTaskAsync(
+                    $"ProcessTracerPipe:{context.CurrentProcessId}",
+                    context.Logger,
+                    ProcessPipeMessage,
+                    cts.Token);
             }
-            else
+
+            private Task<bool> ProcessPipeMessage(string line)
             {
-                ProcessMonitor monitor = new(options, logger);
-                bool needRestart = monitor.Start().ConfigureAwait(false).GetAwaiter().GetResult();
-                if (needRestart && CanElevate())
+                if (line == "[CloseApp]")
                 {
-                    WaitElevate();
+                    HandleCloseAppMessage();
+                }
+                else if (line.StartsWith("[ChildProcess] "))
+                {
+                    HandleChildProcessMessage(line);
+                }
+
+                return Task.FromResult(true);
+            }
+
+            private void HandleCloseAppMessage()
+            {
+                var stopSignalWriter = new StopSignalWriter();
+                stopSignalWriter.WriteStopSignal(ChildPid);
+            }
+
+            private static void HandleChildProcessMessage(string line)
+            {
+                const string prefix = "[ChildProcess] ";
+                string childPidString = line.Substring(prefix.Length);
+                if (int.TryParse(childPidString, out int childPid))
+                {
+                    ChildPid = childPid;
+                }
+            }
+
+            private static void RunElevated(string[] args)
+            {
+                var processStarter = new ElevatedProcessStarter();
+                processStarter.StartElevated(args);
+            }
+        }
+
+        private sealed class StopSignalWriter
+        {
+            public void WriteStopSignal(int targetPid)
+            {
+                Console.WriteLine($@"Try write stop signal to file, Local\ProcessTracerMapFile:{targetPid}");
+
+                try
+                {
+                    using var stopRequestMappedFile = MemoryMappedFile.CreateNew(
+                        $"Local\\ProcessTracerMapFile:{targetPid}",
+                        4,
+                        MemoryMappedFileAccess.ReadWrite);
+
+                    using MemoryMappedViewAccessor accessor = stopRequestMappedFile.CreateViewAccessor();
+                    string message = "stop";
+                    byte[] data = Encoding.UTF8.GetBytes(message);
+
+                    accessor.Write(0, data.Length);
+                    accessor.WriteArray(sizeof(int), data, 0, data.Length);
+
+                    Console.WriteLine(@"Write stop signal success");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(
+                        $"Failed to write stop signal to Local\\ProcessTracerMapFile: {ex.Message}");
+                }
+            }
+        }
+
+        private sealed class ElevatedProcessStarter
+        {
+            public void StartElevated(string[] args)
+            {
+                var newArgs = new List<string>(args)
+                {
+                    $"--parent {Process.GetCurrentProcess().Id}"
+                };
+
+                var elevationInfo = new ProcessStartInfo
+                {
+                    FileName = "launcher.exe",
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    Arguments = string.Join(" ", newArgs),
+                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
+                };
+
+                try
+                {
+                    using var proc = Process.Start(elevationInfo);
+                    proc?.WaitForExit();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Process can't start with admin rights: {ex.Message}");
+                    Environment.Exit(1);
                 }
             }
         }
